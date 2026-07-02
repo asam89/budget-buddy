@@ -1,18 +1,80 @@
 const BASE = "/api";
 
-async function request<T>(path: string, options?: RequestInit): Promise<T> {
+async function request<T>(path: string, opts?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
-    headers: { "Content-Type": "application/json" },
-    ...options,
+    ...opts,
+    headers: {
+      ...(opts?.headers || {}),
+      ...(opts?.body instanceof FormData ? {} : { "Content-Type": "application/json" }),
+    },
+    credentials: "same-origin",
   });
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`API error ${res.status}: ${body}`);
+  if (res.status === 401) {
+    window.location.href = "/login";
+    throw new Error("Not authenticated");
   }
-  if (res.status === 204) return undefined as T;
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.detail || `HTTP ${res.status}`);
+  }
+  if (res.status === 204) return {} as T;
   return res.json();
 }
 
+// Auth
+export const authStatus = () => request<{ setup_required: boolean }>("/auth/status");
+export const setup = (username: string, password: string) =>
+  request("/auth/setup", { method: "POST", body: JSON.stringify({ username, password }) });
+export const login = (username: string, password: string) =>
+  request("/auth/login", { method: "POST", body: JSON.stringify({ username, password }) });
+export const logout = () => request("/auth/logout", { method: "POST" });
+export const getMe = () => request<{ id: number; username: string }>("/auth/me");
+
+// Accounts
+export const getAccounts = () => request<Account[]>("/accounts/");
+export const createAccount = (data: { name: string; account_type: string; current_balance?: number }) =>
+  request<Account>("/accounts/", { method: "POST", body: JSON.stringify(data) });
+
+// Transactions
+export const getTransactions = (params?: Record<string, string>) => {
+  const qs = params ? "?" + new URLSearchParams(params).toString() : "";
+  return request<Transaction[]>(`/transactions/${qs}`);
+};
+export const getPendingReview = () => request<Transaction[]>("/transactions/pending-review");
+export const reviewTransaction = (id: number, data: ReviewData) =>
+  request<Transaction>(`/transactions/${id}/review`, { method: "PUT", body: JSON.stringify(data) });
+export const createTransaction = (data: TransactionCreate) =>
+  request<Transaction>("/transactions/", { method: "POST", body: JSON.stringify(data) });
+
+// Categories
+export const getCategories = () => request<Category[]>("/categories/");
+export const seedCategories = () => request<Category[]>("/categories/seed-defaults", { method: "POST" });
+
+// Budgets
+export const getBudgets = () => request<Budget[]>("/budgets/");
+export const createBudget = (data: { category_id: number; monthly_limit: number }) =>
+  request<Budget>("/budgets/", { method: "POST", body: JSON.stringify(data) });
+
+// Bills
+export const getBills = () => request<Bill[]>("/bills/");
+export const createBill = (data: BillCreate) =>
+  request<Bill>("/bills/", { method: "POST", body: JSON.stringify(data) });
+
+// Import
+export const uploadFile = (endpoint: string, file: File, accountId: number) => {
+  const form = new FormData();
+  form.append("file", file);
+  form.append("account_id", accountId.toString());
+  return request<ImportSource>(endpoint, { method: "POST", body: form });
+};
+export const getImportHistory = () => request<ImportSource[]>("/import/history");
+
+// Dashboard
+export const getDashboard = (months = 1) =>
+  request<DashboardSummary>(`/dashboard/summary?months=${months}`);
+export const getBalances = () => request<BalanceItem[]>("/dashboard/balances");
+
+// Types
 export interface Account {
   id: number;
   name: string;
@@ -35,10 +97,80 @@ export interface Transaction {
   date: string;
   name: string;
   merchant_name: string | null;
-  category: string | null;
-  subcategory: string | null;
+  category_id: number | null;
   pending: boolean;
+  review_status: string;
+  review_source: string | null;
+  confidence: number | null;
   notes: string | null;
+  created_at: string;
+}
+
+export interface TransactionCreate {
+  account_id: number;
+  amount: number;
+  date: string;
+  name: string;
+  merchant_name?: string;
+  category_id?: number;
+}
+
+export interface ReviewData {
+  review_status: string;
+  name?: string;
+  amount?: number;
+  date?: string;
+  category_id?: number;
+  merchant_name?: string;
+}
+
+export interface Category {
+  id: number;
+  name: string;
+  parent_id: number | null;
+  icon: string | null;
+  color: string | null;
+  is_system: boolean;
+}
+
+export interface Budget {
+  id: number;
+  category_id: number;
+  monthly_limit: number;
+  year_month: string | null;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface Bill {
+  id: number;
+  name: string;
+  amount: number;
+  currency: string;
+  category_id: number | null;
+  frequency: string;
+  due_day: number | null;
+  next_due_date: string | null;
+  is_active: boolean;
+  notes: string | null;
+}
+
+export interface BillCreate {
+  name: string;
+  amount: number;
+  frequency: string;
+  due_day?: number;
+  next_due_date?: string;
+  notes?: string;
+}
+
+export interface ImportSource {
+  id: number;
+  source_type: string;
+  filename: string | null;
+  record_count: number;
+  status: string;
+  error_message: string | null;
   created_at: string;
 }
 
@@ -51,6 +183,7 @@ export interface DashboardSummary {
   recent_transactions: Transaction[];
   spending_by_category: Record<string, number>;
   monthly_trend: { month: string; income: number; expenses: number; net: number }[];
+  budget_status: { category: string; budget: number; spent: number; remaining: number; percent_used: number }[];
 }
 
 export interface BalanceItem {
@@ -60,49 +193,3 @@ export interface BalanceItem {
   balance: number;
   currency: string;
 }
-
-export interface SpendingItem {
-  category: string;
-  amount: number;
-}
-
-export const api = {
-  getDashboard: (months = 1) =>
-    request<DashboardSummary>(`/dashboard/summary?months=${months}`),
-
-  getBalances: () => request<BalanceItem[]>("/dashboard/balances"),
-
-  getSpendingBreakdown: (months = 1) =>
-    request<SpendingItem[]>(`/dashboard/spending-breakdown?months=${months}`),
-
-  getAccounts: () => request<Account[]>("/accounts/"),
-
-  createAccount: (data: { name: string; account_type: string; current_balance?: number }) =>
-    request<Account>("/accounts/", { method: "POST", body: JSON.stringify(data) }),
-
-  getTransactions: (params?: { account_id?: number; category?: string; limit?: number }) => {
-    const search = new URLSearchParams();
-    if (params?.account_id) search.set("account_id", String(params.account_id));
-    if (params?.category) search.set("category", params.category);
-    if (params?.limit) search.set("limit", String(params.limit));
-    return request<Transaction[]>(`/transactions/?${search}`);
-  },
-
-  createTransaction: (data: {
-    account_id: number;
-    amount: number;
-    date: string;
-    name: string;
-    category?: string;
-  }) => request<Transaction>("/transactions/", { method: "POST", body: JSON.stringify(data) }),
-
-  createLinkToken: () => request<{ link_token: string }>("/plaid/link-token", { method: "POST" }),
-
-  exchangeToken: (public_token: string) =>
-    request("/plaid/exchange-token", {
-      method: "POST",
-      body: JSON.stringify({ public_token }),
-    }),
-
-  syncTransactions: () => request("/plaid/sync-transactions", { method: "POST" }),
-};

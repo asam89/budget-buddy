@@ -1,18 +1,22 @@
+from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import Account, Institution
+from app.models import Account, User
 from app.schemas import AccountOut, AccountCreate
+from app.utils.auth import get_current_user
 
 router = APIRouter(prefix="/api/accounts", tags=["accounts"])
 
 
 @router.get("/", response_model=list[AccountOut])
 def list_accounts(
-    account_type: str | None = None,
+    account_type: Optional[str] = None,
     is_active: bool = True,
     db: Session = Depends(get_db),
+    _user: User = Depends(get_current_user),
 ):
     query = db.query(Account).filter(Account.is_active == is_active)
     if account_type:
@@ -21,7 +25,11 @@ def list_accounts(
 
 
 @router.get("/{account_id}", response_model=AccountOut)
-def get_account(account_id: int, db: Session = Depends(get_db)):
+def get_account(
+    account_id: int,
+    db: Session = Depends(get_db),
+    _user: User = Depends(get_current_user),
+):
     account = db.query(Account).filter(Account.id == account_id).first()
     if not account:
         raise HTTPException(status_code=404, detail="Account not found")
@@ -29,7 +37,11 @@ def get_account(account_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/", response_model=AccountOut, status_code=201)
-def create_manual_account(data: AccountCreate, db: Session = Depends(get_db)):
+def create_manual_account(
+    data: AccountCreate,
+    db: Session = Depends(get_db),
+    _user: User = Depends(get_current_user),
+):
     account = Account(
         name=data.name,
         account_type=data.account_type,
@@ -44,7 +56,11 @@ def create_manual_account(data: AccountCreate, db: Session = Depends(get_db)):
 
 
 @router.delete("/{account_id}", status_code=204)
-def deactivate_account(account_id: int, db: Session = Depends(get_db)):
+def deactivate_account(
+    account_id: int,
+    db: Session = Depends(get_db),
+    _user: User = Depends(get_current_user),
+):
     account = db.query(Account).filter(Account.id == account_id).first()
     if not account:
         raise HTTPException(status_code=404, detail="Account not found")

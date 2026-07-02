@@ -1,91 +1,63 @@
 # Budget Buddy
 
-A local-first personal finance dashboard that runs on your Mac Mini or Windows desktop. Connect your bank accounts, credit cards, and investment accounts to track funds in and out — all data stays on your machine.
+A locally-hosted personal finance dashboard. All financial data stays on your machine, encrypted at rest with SQLCipher (256-bit AES).
 
 ## Features
 
-- **Local Dashboard** — Beautiful web UI served locally, accessible at `http://localhost:8000`
-- **Bank & Credit Card Connections** — Connect financial institutions via Plaid
-- **Transaction Tracking** — Automatic categorization of income and expenses
-- **Funds In & Out** — Real-time view of money flowing through your accounts
-- **Charts & Analytics** — Spending trends, category breakdowns, net worth tracking
-- **Privacy First** — All data stored locally in SQLite; nothing leaves your machine
-
-## Tech Stack
-
-- **Backend**: Python 3.11+ / FastAPI / SQLite
-- **Frontend**: React / Vite / Tailwind CSS / Recharts
-- **Financial Data**: Plaid API (bank/CC/investment connections)
+- **Account connections** via Plaid (or manual entry)
+- **Data import** from CSV, Excel, PDF bank statements (AI-parsed via Claude)
+- **Dedup** prevents duplicate transactions on re-import
+- **AI review gate** - AI-parsed transactions are flagged "needs review" and never auto-committed
+- **Spending analytics** with category breakdowns, monthly trends, and budget-vs-actual tracking
+- **Local dashboard** accessible from any device on your home network
+- **Auth gate** with bcrypt-hashed passwords and signed session cookies
 
 ## Quick Start
 
-### Prerequisites
-
-- Python 3.11+
-- Node.js 18+
-- A [Plaid](https://plaid.com/) account (free Sandbox for testing)
-
-### Setup
-
 ```bash
-# Clone the repo
+# Clone and set up
 git clone https://github.com/asam89/budget-buddy.git
 cd budget-buddy
 
-# Backend setup
-python -m venv .venv
-source .venv/bin/activate   # Windows: .venv\Scripts\activate
+# Backend
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env        # Add your Plaid credentials
 
-# Frontend setup
-cd frontend
-npm install
-npm run build
-cd ..
+# Frontend
+cd frontend && npm install && npm run build && cd ..
 
-# Run the app
-python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+# Configure
+cp .env.example .env
+# Edit .env with your DB passphrase, Plaid keys, Anthropic key
+
+# Run
+uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
-Open `http://localhost:8000` in your browser.
+Open http://localhost:8000 — on first visit, create your admin account.
 
-## Environment Variables
+## Tech Stack
 
-| Variable | Description |
-|----------|-------------|
-| `PLAID_CLIENT_ID` | Your Plaid client ID |
-| `PLAID_SECRET` | Your Plaid secret key |
-| `PLAID_ENV` | Plaid environment (`sandbox`, `development`, `production`) |
-| `SECRET_KEY` | App secret key for session encryption |
+| Layer | Technology |
+|-------|-----------|
+| Backend | Python 3.10+ / FastAPI |
+| Database | SQLite + SQLCipher (encrypted) |
+| ORM | SQLAlchemy 2.x |
+| Frontend | React 18 + Vite + Tailwind CSS + Recharts |
+| Financial data | Plaid API |
+| AI parsing | Anthropic Claude API |
+| Auth | bcrypt + signed session cookies |
 
-## Project Structure
+## Tests
 
-```
-budget-buddy/
-├── app/
-│   ├── main.py              # FastAPI app entry point
-│   ├── config.py            # Configuration & env vars
-│   ├── database.py          # SQLite setup & session
-│   ├── models.py            # SQLAlchemy models
-│   ├── schemas.py           # Pydantic schemas
-│   └── routers/
-│       ├── accounts.py      # Account management endpoints
-│       ├── transactions.py  # Transaction endpoints
-│       ├── plaid.py         # Plaid integration endpoints
-│       └── dashboard.py     # Dashboard data endpoints
-├── frontend/
-│   ├── src/
-│   │   ├── App.tsx
-│   │   ├── components/      # React components
-│   │   ├── pages/           # Dashboard pages
-│   │   └── api/             # API client
-│   └── package.json
-├── requirements.txt
-├── .env.example
-└── README.md
+```bash
+source .venv/bin/activate
+python -m pytest tests/ -v
 ```
 
-## License
+19 regression tests covering: dedup logic, CSV/Excel import parsing, and analytics aggregation math.
 
-MIT
+## API Docs
+
+With the server running, visit http://localhost:8000/docs for interactive API docs (Swagger UI).
