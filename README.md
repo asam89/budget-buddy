@@ -58,6 +58,11 @@ python -m pytest tests/ -v
 
 19 regression tests covering: dedup logic, CSV/Excel import parsing, and analytics aggregation math.
 
+## Documentation
+
+- **[Deployment Guide](docs/DEPLOYMENT.md)** — Full setup instructions for Mac and Windows, auto-start on boot, security checklist, updating to new versions
+- **[Contributing & Development](docs/CONTRIBUTING.md)** — Branching strategy, dev setup, project structure, versioning, multi-user roadmap
+
 ## API Docs
 
 With the server running, visit http://localhost:8000/docs for interactive API docs (Swagger UI).
