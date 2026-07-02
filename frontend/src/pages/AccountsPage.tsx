@@ -1,182 +1,104 @@
-import { useEffect, useState } from "react";
-import { Plus, CreditCard, Landmark, PiggyBank, TrendingUp } from "lucide-react";
-import { api, Account } from "../api/client";
+import { useState, useEffect, FormEvent } from "react";
+import { getAccounts, createAccount, Account } from "../api/client";
+import { Plus, Wallet } from "lucide-react";
 
-const ACCOUNT_ICONS: Record<string, React.ElementType> = {
-  checking: Landmark,
-  savings: PiggyBank,
-  credit: CreditCard,
-  investment: TrendingUp,
-};
-
-function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat("en-CA", {
-    style: "currency",
-    currency: "CAD",
-  }).format(amount);
-}
+const TYPES = ["checking", "savings", "credit", "investment", "other"];
 
 export default function AccountsPage() {
   const [accounts, setAccounts] = useState<Account[]>([]);
-  const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
-  const [formData, setFormData] = useState({
-    name: "",
-    account_type: "checking",
-    current_balance: 0,
-  });
-
-  const loadAccounts = () => {
-    setLoading(true);
-    api
-      .getAccounts()
-      .then(setAccounts)
-      .catch(() => setAccounts([]))
-      .finally(() => setLoading(false));
-  };
+  const [name, setName] = useState("");
+  const [type, setType] = useState("checking");
+  const [balance, setBalance] = useState("0");
 
   useEffect(() => {
-    loadAccounts();
+    getAccounts().then(setAccounts);
   }, []);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleCreate = async (e: FormEvent) => {
     e.preventDefault();
-    await api.createAccount(formData);
+    const acct = await createAccount({
+      name,
+      account_type: type,
+      current_balance: parseFloat(balance) || 0,
+    });
+    setAccounts([...accounts, acct]);
     setShowForm(false);
-    setFormData({ name: "", account_type: "checking", current_balance: 0 });
-    loadAccounts();
+    setName("");
+    setBalance("0");
   };
 
-  const totalBalance = accounts.reduce((sum, a) => sum + a.current_balance, 0);
+  const fmt = (n: number) =>
+    new Intl.NumberFormat("en-CA", { style: "currency", currency: "CAD" }).format(n);
 
   return (
-    <div className="p-8">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h2 className="text-2xl font-bold">Accounts</h2>
-          <p className="text-gray-500 mt-1">
-            Total balance: {formatCurrency(totalBalance)}
-          </p>
-        </div>
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h2 className="text-2xl font-bold">Accounts</h2>
         <button
           onClick={() => setShowForm(!showForm)}
-          className="flex items-center gap-2 bg-brand-600 text-white px-4 py-2 rounded-lg hover:bg-brand-700 transition-colors"
+          className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg text-sm"
         >
-          <Plus className="w-4 h-4" />
-          Add Account
+          <Plus size={16} /> Add Account
         </button>
       </div>
 
-      {/* Add account form */}
       {showForm && (
-        <div className="bg-white rounded-xl shadow-sm border p-6 mb-6">
-          <h3 className="text-lg font-semibold mb-4">Add Manual Account</h3>
-          <form onSubmit={handleSubmit} className="flex gap-4 items-end">
-            <div className="flex-1">
-              <label className="block text-sm text-gray-600 mb-1">
-                Account Name
-              </label>
-              <input
-                type="text"
-                required
-                value={formData.name}
-                onChange={(e) =>
-                  setFormData({ ...formData, name: e.target.value })
-                }
-                className="w-full border rounded-lg px-3 py-2"
-                placeholder="e.g. TD Chequing"
-              />
-            </div>
-            <div>
-              <label className="block text-sm text-gray-600 mb-1">Type</label>
-              <select
-                value={formData.account_type}
-                onChange={(e) =>
-                  setFormData({ ...formData, account_type: e.target.value })
-                }
-                className="border rounded-lg px-3 py-2"
-              >
-                <option value="checking">Chequing</option>
-                <option value="savings">Savings</option>
-                <option value="credit">Credit Card</option>
-                <option value="investment">Investment</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm text-gray-600 mb-1">
-                Balance
-              </label>
-              <input
-                type="number"
-                step="0.01"
-                value={formData.current_balance}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    current_balance: parseFloat(e.target.value) || 0,
-                  })
-                }
-                className="w-32 border rounded-lg px-3 py-2"
-              />
-            </div>
-            <button
-              type="submit"
-              className="bg-brand-600 text-white px-6 py-2 rounded-lg hover:bg-brand-700"
+        <form onSubmit={handleCreate} className="bg-gray-800 rounded-xl p-4 border border-gray-700 space-y-3">
+          <div className="grid grid-cols-3 gap-3">
+            <input
+              placeholder="Account name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm"
+              required
+            />
+            <select
+              value={type}
+              onChange={(e) => setType(e.target.value)}
+              className="bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm"
             >
-              Add
-            </button>
-          </form>
-        </div>
+              {TYPES.map((t) => (
+                <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>
+              ))}
+            </select>
+            <input
+              type="number"
+              step="0.01"
+              placeholder="Balance"
+              value={balance}
+              onChange={(e) => setBalance(e.target.value)}
+              className="bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm"
+            />
+          </div>
+          <button type="submit" className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg text-sm">
+            Create
+          </button>
+        </form>
       )}
 
-      {/* Account list */}
-      {loading ? (
-        <p className="text-gray-400">Loading accounts...</p>
-      ) : accounts.length === 0 ? (
-        <div className="bg-white rounded-xl shadow-sm border p-8 text-center text-gray-500">
-          <Landmark className="w-12 h-12 mx-auto mb-3 text-gray-300" />
-          <p className="text-lg mb-2">No accounts yet</p>
-          <p>Add a manual account or connect your bank via Plaid.</p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {accounts.map((account) => {
-            const Icon = ACCOUNT_ICONS[account.account_type] || Landmark;
-            return (
-              <div
-                key={account.id}
-                className="bg-white rounded-xl shadow-sm border p-6 hover:shadow-md transition-shadow"
-              >
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-gray-100 rounded-lg">
-                      <Icon className="w-5 h-5 text-gray-600" />
-                    </div>
-                    <div>
-                      <h4 className="font-semibold">{account.name}</h4>
-                      <p className="text-sm text-gray-500 capitalize">
-                        {account.account_type}
-                        {account.mask && ` ••••${account.mask}`}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-                <div className="mt-4">
-                  <p className="text-2xl font-bold">
-                    {formatCurrency(account.current_balance)}
-                  </p>
-                  {account.available_balance !== null &&
-                    account.available_balance !== account.current_balance && (
-                      <p className="text-sm text-gray-500">
-                        Available: {formatCurrency(account.available_balance)}
-                      </p>
-                    )}
-                </div>
+      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {accounts.map((a) => (
+          <div key={a.id} className="bg-gray-800 rounded-xl p-4 border border-gray-700">
+            <div className="flex items-center gap-3 mb-3">
+              <Wallet className="text-emerald-400" size={20} />
+              <div>
+                <p className="font-medium">{a.name}</p>
+                <p className="text-xs text-gray-400 capitalize">{a.account_type}</p>
               </div>
-            );
-          })}
-        </div>
-      )}
+            </div>
+            <p className={`text-xl font-bold ${a.current_balance >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+              {fmt(a.current_balance)}
+            </p>
+            {a.mask && <p className="text-xs text-gray-500 mt-1">****{a.mask}</p>}
+          </div>
+        ))}
+        {accounts.length === 0 && (
+          <p className="text-gray-500 col-span-full text-center py-8">
+            No accounts yet. Add one manually or connect via Plaid in Settings.
+          </p>
+        )}
+      </div>
     </div>
   );
 }

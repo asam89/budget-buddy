@@ -1,111 +1,42 @@
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
 import {
-  TrendingUp,
-  TrendingDown,
-  DollarSign,
-  Landmark,
-} from "lucide-react";
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
-  Legend,
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
+  PieChart, Pie, Cell, Legend,
 } from "recharts";
-import { api, DashboardSummary } from "../api/client";
+import { getDashboard, DashboardSummary } from "../api/client";
 
 const COLORS = [
-  "#22c55e", "#3b82f6", "#f59e0b", "#ef4444", "#8b5cf6",
+  "#10b981", "#3b82f6", "#f59e0b", "#ef4444", "#8b5cf6",
   "#ec4899", "#14b8a6", "#f97316", "#6366f1", "#84cc16",
 ];
 
-function StatCard({
-  label,
-  value,
-  icon: Icon,
-  color,
-}: {
-  label: string;
-  value: string;
-  icon: React.ElementType;
-  color: string;
-}) {
-  return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm text-gray-500">{label}</p>
-          <p className="text-2xl font-bold mt-1">{value}</p>
-        </div>
-        <div className={`p-3 rounded-full ${color}`}>
-          <Icon className="w-6 h-6 text-white" />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat("en-CA", {
-    style: "currency",
-    currency: "CAD",
-  }).format(amount);
+function fmt(n: number) {
+  return new Intl.NumberFormat("en-CA", { style: "currency", currency: "CAD" }).format(n);
 }
 
 export default function DashboardPage() {
-  const [summary, setSummary] = useState<DashboardSummary | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [months, setMonths] = useState(1);
+  const [data, setData] = useState<DashboardSummary | null>(null);
+  const [months, setMonths] = useState(3);
 
   useEffect(() => {
-    setLoading(true);
-    api
-      .getDashboard(months)
-      .then(setSummary)
-      .catch(() => setSummary(null))
-      .finally(() => setLoading(false));
+    getDashboard(months).then(setData);
   }, [months]);
 
-  if (loading) {
-    return (
-      <div className="p-8 flex items-center justify-center h-full">
-        <div className="text-gray-400 text-lg">Loading dashboard...</div>
-      </div>
-    );
-  }
+  if (!data) return <div className="text-gray-400">Loading dashboard...</div>;
 
-  if (!summary) {
-    return (
-      <div className="p-8">
-        <h2 className="text-2xl font-bold mb-4">Dashboard</h2>
-        <div className="bg-white rounded-xl shadow-sm border p-8 text-center text-gray-500">
-          <p className="text-lg mb-2">Welcome to Budget Buddy!</p>
-          <p>
-            Connect a bank account or add transactions manually to get started.
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  const pieData = Object.entries(summary.spending_by_category).map(
-    ([category, amount]) => ({ name: category, value: amount })
-  );
+  const pieData = Object.entries(data.spending_by_category).map(([name, value]) => ({
+    name,
+    value,
+  }));
 
   return (
-    <div className="p-8">
-      <div className="flex items-center justify-between mb-6">
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold">Dashboard</h2>
         <select
           value={months}
           onChange={(e) => setMonths(Number(e.target.value))}
-          className="border rounded-lg px-3 py-2 text-sm"
+          className="bg-gray-800 border border-gray-600 rounded-lg px-3 py-1.5 text-sm"
         >
           <option value={1}>Last month</option>
           <option value={3}>Last 3 months</option>
@@ -114,131 +45,112 @@ export default function DashboardPage() {
         </select>
       </div>
 
-      {/* Stat cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <StatCard
-          label="Total Balance"
-          value={formatCurrency(summary.total_balance)}
-          icon={Landmark}
-          color="bg-blue-500"
-        />
-        <StatCard
-          label="Income"
-          value={formatCurrency(summary.total_income)}
-          icon={TrendingUp}
-          color="bg-green-500"
-        />
-        <StatCard
-          label="Expenses"
-          value={formatCurrency(summary.total_expenses)}
-          icon={TrendingDown}
-          color="bg-red-500"
-        />
-        <StatCard
-          label="Net Cash Flow"
-          value={formatCurrency(summary.net_cash_flow)}
-          icon={DollarSign}
-          color={summary.net_cash_flow >= 0 ? "bg-green-500" : "bg-red-500"}
-        />
+      {/* Summary Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card label="Total Balance" value={fmt(data.total_balance)} color="text-emerald-400" />
+        <Card label="Income" value={fmt(data.total_income)} color="text-blue-400" />
+        <Card label="Expenses" value={fmt(data.total_expenses)} color="text-red-400" />
+        <Card label="Net Cash Flow" value={fmt(data.net_cash_flow)} color={data.net_cash_flow >= 0 ? "text-emerald-400" : "text-red-400"} />
       </div>
 
-      {/* Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-        {/* Monthly trend */}
-        <div className="bg-white rounded-xl shadow-sm border p-6">
-          <h3 className="text-lg font-semibold mb-4">Monthly Trend</h3>
-          {summary.monthly_trend.length > 0 ? (
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={summary.monthly_trend}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="month" />
-                <YAxis />
-                <Tooltip formatter={(v: number) => formatCurrency(v)} />
-                <Bar dataKey="income" fill="#22c55e" name="Income" />
-                <Bar dataKey="expenses" fill="#ef4444" name="Expenses" />
-              </BarChart>
-            </ResponsiveContainer>
-          ) : (
-            <p className="text-gray-400 text-center py-12">No data yet</p>
-          )}
+      <div className="grid lg:grid-cols-2 gap-6">
+        {/* Monthly Trend */}
+        <div className="bg-gray-800 rounded-xl p-4 border border-gray-700">
+          <h3 className="font-semibold mb-4">Monthly Trend</h3>
+          <ResponsiveContainer width="100%" height={250}>
+            <BarChart data={data.monthly_trend}>
+              <XAxis dataKey="month" tick={{ fill: "#9ca3af", fontSize: 12 }} />
+              <YAxis tick={{ fill: "#9ca3af", fontSize: 12 }} />
+              <Tooltip contentStyle={{ backgroundColor: "#1f2937", border: "1px solid #374151" }} />
+              <Bar dataKey="income" fill="#3b82f6" name="Income" />
+              <Bar dataKey="expenses" fill="#ef4444" name="Expenses" />
+            </BarChart>
+          </ResponsiveContainer>
         </div>
 
-        {/* Spending breakdown */}
-        <div className="bg-white rounded-xl shadow-sm border p-6">
-          <h3 className="text-lg font-semibold mb-4">Spending by Category</h3>
+        {/* Spending by Category */}
+        <div className="bg-gray-800 rounded-xl p-4 border border-gray-700">
+          <h3 className="font-semibold mb-4">Spending by Category</h3>
           {pieData.length > 0 ? (
-            <ResponsiveContainer width="100%" height={300}>
+            <ResponsiveContainer width="100%" height={250}>
               <PieChart>
-                <Pie
-                  data={pieData}
-                  dataKey="value"
-                  nameKey="name"
-                  cx="50%"
-                  cy="50%"
-                  outerRadius={100}
-                  label={({ name, percent }) =>
-                    `${name} (${(percent * 100).toFixed(0)}%)`
-                  }
-                >
+                <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label>
                   {pieData.map((_, i) => (
                     <Cell key={i} fill={COLORS[i % COLORS.length]} />
                   ))}
                 </Pie>
-                <Tooltip formatter={(v: number) => formatCurrency(v)} />
+                <Tooltip contentStyle={{ backgroundColor: "#1f2937", border: "1px solid #374151" }} />
                 <Legend />
               </PieChart>
             </ResponsiveContainer>
           ) : (
-            <p className="text-gray-400 text-center py-12">No spending data</p>
+            <p className="text-gray-500 text-center py-8">No spending data yet</p>
           )}
         </div>
       </div>
 
-      {/* Recent transactions */}
-      <div className="bg-white rounded-xl shadow-sm border p-6">
-        <h3 className="text-lg font-semibold mb-4">Recent Transactions</h3>
-        {summary.recent_transactions.length > 0 ? (
+      {/* Budget Status */}
+      {data.budget_status.length > 0 && (
+        <div className="bg-gray-800 rounded-xl p-4 border border-gray-700">
+          <h3 className="font-semibold mb-4">Budget Status</h3>
+          <div className="space-y-3">
+            {data.budget_status.map((b) => (
+              <div key={b.category}>
+                <div className="flex justify-between text-sm mb-1">
+                  <span>{b.category}</span>
+                  <span className={b.percent_used > 100 ? "text-red-400" : "text-gray-400"}>
+                    {fmt(b.spent)} / {fmt(b.budget)} ({b.percent_used}%)
+                  </span>
+                </div>
+                <div className="w-full bg-gray-700 rounded-full h-2">
+                  <div
+                    className={`h-2 rounded-full ${b.percent_used > 100 ? "bg-red-500" : b.percent_used > 80 ? "bg-yellow-500" : "bg-emerald-500"}`}
+                    style={{ width: `${Math.min(b.percent_used, 100)}%` }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Recent Transactions */}
+      <div className="bg-gray-800 rounded-xl p-4 border border-gray-700">
+        <h3 className="font-semibold mb-4">Recent Transactions</h3>
+        {data.recent_transactions.length > 0 ? (
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-left text-gray-500 border-b">
-                <th className="pb-2">Date</th>
-                <th className="pb-2">Description</th>
-                <th className="pb-2">Category</th>
-                <th className="pb-2 text-right">Amount</th>
+              <tr className="text-gray-400 border-b border-gray-700">
+                <th className="text-left py-2">Date</th>
+                <th className="text-left py-2">Description</th>
+                <th className="text-right py-2">Amount</th>
               </tr>
             </thead>
             <tbody>
-              {summary.recent_transactions.map((txn) => (
-                <tr key={txn.id} className="border-b last:border-0">
-                  <td className="py-3">
-                    {new Date(txn.date).toLocaleDateString()}
-                  </td>
-                  <td className="py-3">
-                    {txn.merchant_name || txn.name}
-                  </td>
-                  <td className="py-3">
-                    <span className="bg-gray-100 text-gray-600 px-2 py-1 rounded text-xs">
-                      {txn.category || "Uncategorized"}
-                    </span>
-                  </td>
-                  <td
-                    className={`py-3 text-right font-medium ${
-                      txn.amount < 0 ? "text-green-600" : "text-red-600"
-                    }`}
-                  >
-                    {txn.amount < 0 ? "+" : "-"}
-                    {formatCurrency(Math.abs(txn.amount))}
+              {data.recent_transactions.map((t) => (
+                <tr key={t.id} className="border-b border-gray-700/50">
+                  <td className="py-2 text-gray-400">{t.date}</td>
+                  <td className="py-2">{t.merchant_name || t.name}</td>
+                  <td className={`py-2 text-right ${t.amount < 0 ? "text-emerald-400" : "text-red-400"}`}>
+                    {fmt(t.amount)}
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
         ) : (
-          <p className="text-gray-400 text-center py-8">
-            No transactions yet. Connect an account or add one manually.
-          </p>
+          <p className="text-gray-500 text-center py-4">No transactions yet</p>
         )}
       </div>
+    </div>
+  );
+}
+
+function Card({ label, value, color }: { label: string; value: string; color: string }) {
+  return (
+    <div className="bg-gray-800 rounded-xl p-4 border border-gray-700">
+      <p className="text-xs text-gray-400 uppercase tracking-wide">{label}</p>
+      <p className={`text-xl font-bold mt-1 ${color}`}>{value}</p>
     </div>
   );
 }

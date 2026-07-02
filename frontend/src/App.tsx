@@ -1,68 +1,61 @@
-import { Routes, Route, Link, useLocation } from "react-router-dom";
-import {
-  LayoutDashboard,
-  CreditCard,
-  ArrowLeftRight,
-  Settings,
-  Wallet,
-} from "lucide-react";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import Sidebar from "./components/Sidebar";
 import DashboardPage from "./pages/DashboardPage";
 import AccountsPage from "./pages/AccountsPage";
 import TransactionsPage from "./pages/TransactionsPage";
-import SettingsPage from "./pages/SettingsPage";
-
-const NAV_ITEMS = [
-  { path: "/", label: "Dashboard", icon: LayoutDashboard },
-  { path: "/accounts", label: "Accounts", icon: CreditCard },
-  { path: "/transactions", label: "Transactions", icon: ArrowLeftRight },
-  { path: "/settings", label: "Settings", icon: Settings },
-];
+import ImportPage from "./pages/ImportPage";
+import BudgetsPage from "./pages/BudgetsPage";
+import ReviewPage from "./pages/ReviewPage";
+import LoginPage from "./pages/LoginPage";
+import { getMe } from "./api/client";
 
 function App() {
-  const location = useLocation();
+  const [user, setUser] = useState<{ id: number; username: string } | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    getMe()
+      .then(setUser)
+      .catch(() => setUser(null))
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+        <div className="text-gray-400 text-lg">Loading...</div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <BrowserRouter>
+        <Routes>
+          <Route path="*" element={<LoginPage onLogin={setUser} />} />
+        </Routes>
+      </BrowserRouter>
+    );
+  }
 
   return (
-    <div className="flex h-screen">
-      {/* Sidebar */}
-      <aside className="w-64 bg-gray-900 text-white flex flex-col">
-        <div className="p-6 flex items-center gap-3">
-          <Wallet className="w-8 h-8 text-brand-400" />
-          <h1 className="text-xl font-bold">Budget Buddy</h1>
-        </div>
-        <nav className="flex-1 px-4 space-y-1">
-          {NAV_ITEMS.map((item) => {
-            const active = location.pathname === item.path;
-            return (
-              <Link
-                key={item.path}
-                to={item.path}
-                className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-                  active
-                    ? "bg-brand-600 text-white"
-                    : "text-gray-300 hover:bg-gray-800 hover:text-white"
-                }`}
-              >
-                <item.icon className="w-5 h-5" />
-                {item.label}
-              </Link>
-            );
-          })}
-        </nav>
-        <div className="p-4 text-xs text-gray-500">
-          Budget Buddy v0.1.0 &mdash; All data stored locally
-        </div>
-      </aside>
-
-      {/* Main content */}
-      <main className="flex-1 overflow-y-auto bg-gray-50">
-        <Routes>
-          <Route path="/" element={<DashboardPage />} />
-          <Route path="/accounts" element={<AccountsPage />} />
-          <Route path="/transactions" element={<TransactionsPage />} />
-          <Route path="/settings" element={<SettingsPage />} />
-        </Routes>
-      </main>
-    </div>
+    <BrowserRouter>
+      <div className="flex min-h-screen bg-gray-900 text-gray-100">
+        <Sidebar username={user.username} />
+        <main className="flex-1 p-6 overflow-auto">
+          <Routes>
+            <Route path="/" element={<DashboardPage />} />
+            <Route path="/accounts" element={<AccountsPage />} />
+            <Route path="/transactions" element={<TransactionsPage />} />
+            <Route path="/import" element={<ImportPage />} />
+            <Route path="/budgets" element={<BudgetsPage />} />
+            <Route path="/review" element={<ReviewPage />} />
+            <Route path="*" element={<Navigate to="/" />} />
+          </Routes>
+        </main>
+      </div>
+    </BrowserRouter>
   );
 }
 

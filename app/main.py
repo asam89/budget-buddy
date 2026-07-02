@@ -1,4 +1,3 @@
-import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -7,7 +6,10 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
 from app.database import Base, engine
-from app.routers import accounts, transactions, plaid, dashboard
+from app.routers import (
+    auth, accounts, transactions, plaid, dashboard,
+    categories, budgets, bills, imports,
+)
 
 
 @asynccontextmanager
@@ -23,9 +25,14 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.include_router(auth.router)
 app.include_router(accounts.router)
 app.include_router(transactions.router)
+app.include_router(categories.router)
+app.include_router(budgets.router)
+app.include_router(bills.router)
 app.include_router(plaid.router)
+app.include_router(imports.router)
 app.include_router(dashboard.router)
 
 # Serve the React frontend
