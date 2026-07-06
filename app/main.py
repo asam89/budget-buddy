@@ -8,7 +8,7 @@ from fastapi.responses import FileResponse
 from app.database import Base, engine
 from app.routers import (
     auth, accounts, transactions, plaid, dashboard,
-    categories, budgets, bills, imports, entities, reports,
+    categories, budgets, bills, imports, entities, reports, export,
 )
 
 
@@ -36,6 +36,7 @@ app.include_router(imports.router)
 app.include_router(entities.router)
 app.include_router(dashboard.router)
 app.include_router(reports.router)
+app.include_router(export.router)
 
 # Serve the React frontend
 frontend_dist = Path(__file__).parent.parent / "frontend" / "dist"

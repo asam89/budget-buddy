@@ -99,6 +99,19 @@ export const getDashboard = (months = 1) =>
   request<DashboardSummary>(`/dashboard/summary?months=${months}`);
 export const getBalances = () => request<BalanceItem[]>("/dashboard/balances");
 
+// Export helpers (trigger file download via window.open)
+export const exportTransactionsCsv = (params?: Record<string, string>) => {
+  const qs = params ? "?" + new URLSearchParams(params).toString() : "";
+  window.open(`${BASE}/export/transactions/csv${qs}`, "_blank");
+};
+export const exportTransactionsXlsx = (params?: Record<string, string>) => {
+  const qs = params ? "?" + new URLSearchParams(params).toString() : "";
+  window.open(`${BASE}/export/transactions/xlsx${qs}`, "_blank");
+};
+export const exportFullWorkbook = () => {
+  window.open(`${BASE}/export/full`, "_blank");
+};
+
 // Types
 export interface Account {
   id: number;
