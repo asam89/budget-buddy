@@ -40,15 +40,40 @@ export const getTransactions = (params?: Record<string, string>) => {
   const qs = params ? "?" + new URLSearchParams(params).toString() : "";
   return request<Transaction[]>(`/transactions/${qs}`);
 };
+export const getTransactionTotals = (params?: Record<string, string>) => {
+  const qs = params ? "?" + new URLSearchParams(params).toString() : "";
+  return request<TransactionTotals>(`/transactions/totals${qs}`);
+};
 export const getPendingReview = () => request<Transaction[]>("/transactions/pending-review");
 export const reviewTransaction = (id: number, data: ReviewData) =>
   request<Transaction>(`/transactions/${id}/review`, { method: "PUT", body: JSON.stringify(data) });
 export const createTransaction = (data: TransactionCreate) =>
   request<Transaction>("/transactions/", { method: "POST", body: JSON.stringify(data) });
+export const inlineEditTransaction = (id: number, data: Partial<TransactionInlineEdit>) =>
+  request<Transaction>(`/transactions/${id}`, { method: "PATCH", body: JSON.stringify(data) });
+export const bulkAssignEntity = (transactionIds: number[], entityId: number) =>
+  request<{ updated_count: number }>("/transactions/bulk-entity", {
+    method: "POST",
+    body: JSON.stringify({ transaction_ids: transactionIds, entity_id: entityId }),
+  });
+export const deleteTransaction = (id: number) =>
+  request<{}>(`/transactions/${id}`, { method: "DELETE" });
 
 // Categories
 export const getCategories = () => request<Category[]>("/categories/");
 export const seedCategories = () => request<Category[]>("/categories/seed-defaults", { method: "POST" });
+
+// Entities
+export const getEntities = () => request<Entity[]>("/entities/");
+
+// Saved Views
+export const getSavedViews = () => request<SavedView[]>("/entities/views/all");
+export const createSavedView = (data: { name: string; config: string }) =>
+  request<SavedView>("/entities/views", { method: "POST", body: JSON.stringify(data) });
+export const updateSavedView = (id: number, data: { name: string; config: string }) =>
+  request<SavedView>(`/entities/views/${id}`, { method: "PUT", body: JSON.stringify(data) });
+export const deleteSavedView = (id: number) =>
+  request<{}>(`/entities/views/${id}`, { method: "DELETE" });
 
 // Budgets
 export const getBudgets = () => request<Budget[]>("/budgets/");
@@ -92,6 +117,9 @@ export interface Account {
 export interface Transaction {
   id: number;
   account_id: number;
+  entity_id: number | null;
+  entity_source: string | null;
+  txn_type: string | null;
   amount: number;
   currency: string;
   date: string;
@@ -103,6 +131,38 @@ export interface Transaction {
   review_source: string | null;
   confidence: number | null;
   notes: string | null;
+  created_at: string;
+}
+
+export interface TransactionInlineEdit {
+  name?: string;
+  category_id?: number;
+  entity_id?: number;
+  notes?: string;
+  amount?: number;
+  date?: string;
+}
+
+export interface TransactionTotals {
+  count: number;
+  sum: number;
+  income: number;
+  expenses: number;
+  entity_subtotals: Record<string, number>;
+}
+
+export interface Entity {
+  id: number;
+  name: string;
+  entity_type: string;
+  is_default: boolean;
+  created_at: string;
+}
+
+export interface SavedView {
+  id: number;
+  name: string;
+  config: string;
   created_at: string;
 }
 

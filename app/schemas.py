@@ -227,6 +227,15 @@ class TransactionBulkEntityAssign(BaseModel):
     entity_id: int
 
 
+class TransactionInlineEdit(BaseModel):
+    name: Optional[str] = None
+    category_id: Optional[int] = None
+    entity_id: Optional[int] = None
+    notes: Optional[str] = None
+    amount: Optional[float] = None
+    date: Optional[date] = None
+
+
 # --- Saved Views ---
 class SavedViewOut(BaseModel):
     id: int

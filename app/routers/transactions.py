@@ -4,12 +4,14 @@ from datetime import date
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.orm import Session
 
+from sqlalchemy import func, or_, select
+
 from app.database import get_db
-from app.models import Transaction, TransactionSplit, Entity, User
+from app.models import Transaction, TransactionSplit, Entity, User, Category
 from app.schemas import (
     TransactionOut, TransactionCreate, TransactionReview,
     TransactionSplitsRequest, TransactionSplitOut,
-    TransactionBulkEntityAssign,
+    TransactionBulkEntityAssign, TransactionInlineEdit,
 )
 from app.utils.auth import get_current_user
 
@@ -43,13 +45,9 @@ def list_transactions(
     if category_id:
         query = query.filter(Transaction.category_id == category_id)
     if entity_id is not None:
-        # Include transactions directly assigned OR split-attributed to this entity
-        split_txn_ids = (
-            db.query(TransactionSplit.transaction_id)
-            .filter(TransactionSplit.entity_id == entity_id)
-            .subquery()
+        split_txn_ids = select(TransactionSplit.transaction_id).where(
+            TransactionSplit.entity_id == entity_id
         )
-        from sqlalchemy import or_
         query = query.filter(
             or_(Transaction.entity_id == entity_id, Transaction.id.in_(split_txn_ids))
         )
@@ -63,7 +61,6 @@ def list_transactions(
         query = query.filter(Transaction.date <= end_date)
     if q:
         pattern = f"%{q}%"
-        from sqlalchemy import or_
         query = query.filter(
             or_(Transaction.name.ilike(pattern), Transaction.merchant_name.ilike(pattern))
         )
@@ -144,6 +141,101 @@ def create_transaction(
     return txn
 
 
+@router.get("/totals")
+def get_transaction_totals(
+    account_id: Optional[int] = None,
+    category_id: Optional[int] = None,
+    entity_id: Optional[int] = None,
+    txn_type: Optional[str] = None,
+    review_status: Optional[str] = None,
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
+    q: Optional[str] = None,
+    min_amount: Optional[float] = None,
+    max_amount: Optional[float] = None,
+    db: Session = Depends(get_db),
+    _user: User = Depends(get_current_user),
+):
+    """Server-computed totals for the current filter set (all pages, not just visible)."""
+    query = db.query(Transaction).filter(Transaction.review_status == "confirmed")
+
+    if account_id:
+        query = query.filter(Transaction.account_id == account_id)
+    if category_id:
+        query = query.filter(Transaction.category_id == category_id)
+    if entity_id is not None:
+        split_txn_ids = select(TransactionSplit.transaction_id).where(
+            TransactionSplit.entity_id == entity_id
+        )
+        query = query.filter(
+            or_(Transaction.entity_id == entity_id, Transaction.id.in_(split_txn_ids))
+        )
+    if txn_type:
+        query = query.filter(Transaction.txn_type == txn_type)
+    if review_status:
+        query = query.filter(Transaction.review_status == review_status)
+    if start_date:
+        query = query.filter(Transaction.date >= start_date)
+    if end_date:
+        query = query.filter(Transaction.date <= end_date)
+    if q:
+        pattern = f"%{q}%"
+        query = query.filter(
+            or_(Transaction.name.ilike(pattern), Transaction.merchant_name.ilike(pattern))
+        )
+    if min_amount is not None:
+        query = query.filter(Transaction.amount >= min_amount)
+    if max_amount is not None:
+        query = query.filter(Transaction.amount <= max_amount)
+
+    txns = query.all()
+    count = len(txns)
+    total_sum = round(sum(t.amount for t in txns), 2)
+    income = round(sum(t.amount for t in txns if t.amount < 0), 2)
+    expenses = round(sum(t.amount for t in txns if t.amount > 0), 2)
+
+    entity_subtotals: dict[int, float] = {}
+    for t in txns:
+        if t.entity_id:
+            entity_subtotals[t.entity_id] = round(
+                entity_subtotals.get(t.entity_id, 0) + t.amount, 2
+            )
+        for s in t.splits:
+            entity_subtotals[s.entity_id] = round(
+                entity_subtotals.get(s.entity_id, 0) + s.amount, 2
+            )
+
+    return {
+        "count": count,
+        "sum": total_sum,
+        "income": income,
+        "expenses": expenses,
+        "entity_subtotals": entity_subtotals,
+    }
+
+
+@router.post("/bulk-entity", response_model=dict)
+def bulk_assign_entity(
+    data: TransactionBulkEntityAssign,
+    db: Session = Depends(get_db),
+    _user: User = Depends(get_current_user),
+):
+    entity = db.query(Entity).filter(Entity.id == data.entity_id).first()
+    if not entity:
+        raise HTTPException(status_code=404, detail="Entity not found")
+
+    updated = 0
+    for txn_id in data.transaction_ids:
+        txn = db.query(Transaction).filter(Transaction.id == txn_id).first()
+        if txn and not txn.splits:
+            txn.entity_id = data.entity_id
+            txn.entity_source = "manual"
+            updated += 1
+
+    db.commit()
+    return {"updated_count": updated}
+
+
 @router.put("/{transaction_id}/review", response_model=TransactionOut)
 def review_transaction(
     transaction_id: int,
@@ -186,6 +278,64 @@ def get_transaction(
     txn = db.query(Transaction).filter(Transaction.id == transaction_id).first()
     if not txn:
         raise HTTPException(status_code=404, detail="Transaction not found")
+    return txn
+
+
+@router.patch("/{transaction_id}", response_model=TransactionOut)
+def inline_edit_transaction(
+    transaction_id: int,
+    data: TransactionInlineEdit,
+    db: Session = Depends(get_db),
+    _user: User = Depends(get_current_user),
+):
+    """Inline edit: category, entity, notes, name always editable.
+    Amount/date only for manual transactions (to protect dedup hashes)."""
+    txn = db.query(Transaction).filter(Transaction.id == transaction_id).first()
+    if not txn:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+
+    is_manual = txn.review_source == "manual"
+
+    if data.name is not None:
+        txn.name = data.name
+    if data.category_id is not None:
+        txn.category_id = data.category_id
+    if data.entity_id is not None:
+        if txn.splits:
+            raise HTTPException(
+                status_code=422,
+                detail="Transaction has splits — remove splits first.",
+            )
+        entity = db.query(Entity).filter(Entity.id == data.entity_id).first()
+        if not entity:
+            raise HTTPException(status_code=404, detail="Entity not found")
+        txn.entity_id = data.entity_id
+        txn.entity_source = "manual"
+    if data.notes is not None:
+        txn.notes = data.notes
+    if data.amount is not None:
+        if not is_manual:
+            raise HTTPException(
+                status_code=422,
+                detail="Amount can only be edited on manually-created transactions.",
+            )
+        txn.amount = data.amount
+        txn.txn_type = "income" if data.amount < 0 else "expense"
+    if data.date is not None:
+        if not is_manual:
+            raise HTTPException(
+                status_code=422,
+                detail="Date can only be edited on manually-created transactions.",
+            )
+        txn.date = data.date
+
+    if is_manual and (data.amount is not None or data.date is not None or data.name is not None):
+        txn.dedup_hash = Transaction.compute_dedup_hash(
+            txn.date, txn.amount, txn.name, txn.account_id
+        )
+
+    db.commit()
+    db.refresh(txn)
     return txn
 
 
@@ -295,24 +445,3 @@ def delete_transaction_splits(
         txn.entity_source = "default"
     db.commit()
 
-
-@router.post("/bulk-entity", response_model=dict)
-def bulk_assign_entity(
-    data: TransactionBulkEntityAssign,
-    db: Session = Depends(get_db),
-    _user: User = Depends(get_current_user),
-):
-    entity = db.query(Entity).filter(Entity.id == data.entity_id).first()
-    if not entity:
-        raise HTTPException(status_code=404, detail="Entity not found")
-
-    updated = 0
-    for txn_id in data.transaction_ids:
-        txn = db.query(Transaction).filter(Transaction.id == txn_id).first()
-        if txn and not txn.splits:
-            txn.entity_id = data.entity_id
-            txn.entity_source = "manual"
-            updated += 1
-
-    db.commit()
-    return {"updated_count": updated}
