@@ -7,6 +7,7 @@ import TransactionsPage from "./pages/TransactionsPage";
 import ImportPage from "./pages/ImportPage";
 import BudgetsPage from "./pages/BudgetsPage";
 import ReviewPage from "./pages/ReviewPage";
+import ReportsPage from "./pages/ReportsPage";
 import LoginPage from "./pages/LoginPage";
 import { getMe } from "./api/client";
 
@@ -51,6 +52,7 @@ function App() {
             <Route path="/import" element={<ImportPage />} />
             <Route path="/budgets" element={<BudgetsPage />} />
             <Route path="/review" element={<ReviewPage />} />
+            <Route path="/reports" element={<ReportsPage />} />
             <Route path="*" element={<Navigate to="/" />} />
           </Routes>
         </main>

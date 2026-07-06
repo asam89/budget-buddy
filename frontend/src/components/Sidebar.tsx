@@ -1,7 +1,7 @@
 import { NavLink } from "react-router-dom";
 import {
   LayoutDashboard, Wallet, ArrowLeftRight, Upload,
-  Target, AlertCircle, LogOut,
+  Target, AlertCircle, BarChart3, LogOut,
 } from "lucide-react";
 import { logout } from "../api/client";
 
@@ -12,6 +12,7 @@ const links = [
   { to: "/import", icon: Upload, label: "Import" },
   { to: "/budgets", icon: Target, label: "Budgets" },
   { to: "/review", icon: AlertCircle, label: "Review" },
+  { to: "/reports", icon: BarChart3, label: "Reports" },
 ];
 
 export default function Sidebar({ username }: { username: string }) {
