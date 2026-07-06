@@ -10,6 +10,7 @@ import pandas as pd
 from sqlalchemy.orm import Session
 
 from app.models import Transaction, ImportSource, Account
+from app.services.rule_engine import apply_rules_to_transaction, infer_txn_type
 
 logger = logging.getLogger(__name__)
 
@@ -113,12 +114,15 @@ def _import_tabular(
                 date=txn_date,
                 name=name,
                 merchant_name=merchant if merchant and merchant != "nan" else None,
+                txn_type=infer_txn_type(amount),
                 review_status="confirmed",
                 review_source="csv_import" if source_type == "csv" else "excel_import",
                 dedup_hash=dedup,
                 source_file=filename,
             )
             db.add(txn)
+            db.flush()
+            apply_rules_to_transaction(db, txn)
             added += 1
 
         source.record_count = added

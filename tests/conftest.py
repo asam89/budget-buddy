@@ -27,6 +27,8 @@ def db_session(tmp_path):
 @pytest.fixture
 def client(db_session):
     from fastapi.testclient import TestClient
+    from app.utils.auth import get_current_user
+    from app.models import User
 
     def override_get_db():
         try:
@@ -34,7 +36,16 @@ def client(db_session):
         finally:
             pass
 
+    # Seed a test user and bypass auth
+    user = User(username="testuser", password_hash="unused", is_active=True)
+    db_session.add(user)
+    db_session.flush()
+
+    def override_auth():
+        return user
+
     app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_current_user] = override_auth
     with TestClient(app) as c:
         yield c
     app.dependency_overrides.clear()

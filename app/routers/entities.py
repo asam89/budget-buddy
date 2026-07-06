@@ -14,6 +14,7 @@ from app.schemas import (
     TransactionBulkEntityAssign,
 )
 from app.models import SavedView
+from app.services.rule_engine import match_rule
 from app.utils.auth import get_current_user
 
 router = APIRouter(prefix="/api/entities", tags=["entities"])
@@ -184,27 +185,13 @@ def delete_entity_rule(
 
 # ---- Retroactive rule application ----
 
-def _match_rule(rule: EntityRule, txn: Transaction) -> bool:
-    if rule.field == "account_id":
-        txn_val = str(txn.account_id)
-    elif rule.field == "category_id":
-        txn_val = str(txn.category_id) if txn.category_id is not None else ""
-    elif rule.field == "name":
-        txn_val = (txn.name or "").lower()
-    elif rule.field == "merchant_name":
-        txn_val = (txn.merchant_name or "").lower()
-    else:
-        return False
-
-    match_val = rule.value.lower() if rule.field not in ("account_id", "category_id") else rule.value
-
-    if rule.operator == "equals":
-        return txn_val == match_val
-    elif rule.operator == "contains":
-        return match_val in txn_val
-    elif rule.operator == "starts_with":
-        return txn_val.startswith(match_val)
-    return False
+def _txn_fields(txn: Transaction) -> dict:
+    return {
+        "name": txn.name,
+        "merchant_name": txn.merchant_name,
+        "account_id": txn.account_id,
+        "category_id": txn.category_id,
+    }
 
 
 @router.post("/{entity_id}/rules/apply", response_model=RuleApplyPreview)
@@ -238,8 +225,9 @@ def apply_rules_preview(
     for txn in candidates:
         if txn.splits:
             continue
+        fields = _txn_fields(txn)
         for rule in rules:
-            if _match_rule(rule, txn):
+            if match_rule(rule, fields):
                 matched.append(txn)
                 break
 
@@ -280,8 +268,9 @@ def apply_rules_commit(
     for txn in candidates:
         if txn.splits:
             continue
+        fields = _txn_fields(txn)
         for rule in rules:
-            if _match_rule(rule, txn):
+            if match_rule(rule, fields):
                 txn.entity_id = entity_id
                 txn.entity_source = "rule"
                 updated += 1

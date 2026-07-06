@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.models import Transaction, ImportSource
+from app.services.rule_engine import apply_rules_to_transaction, infer_txn_type
 
 logger = logging.getLogger(__name__)
 
@@ -86,10 +87,13 @@ def parse_statement_text(
             if db.query(Transaction).filter(Transaction.dedup_hash == dedup).first():
                 continue
 
+            # AI parser does NOT auto-assign entities — entity assignment
+            # follows the rule engine only, per the review-gate philosophy.
             txn = Transaction(
                 account_id=account_id,
                 import_source_id=source.id,
                 amount=amount,
+                txn_type=infer_txn_type(amount),
                 date=txn_date,
                 name=name,
                 merchant_name=item.get("merchant_name"),
@@ -100,6 +104,8 @@ def parse_statement_text(
                 dedup_hash=dedup,
             )
             db.add(txn)
+            db.flush()
+            apply_rules_to_transaction(db, txn)
             added += 1
 
         source.record_count = added
