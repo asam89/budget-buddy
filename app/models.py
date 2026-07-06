@@ -3,7 +3,7 @@ from datetime import datetime, date
 
 from sqlalchemy import (
     Column, Integer, String, Float, DateTime, Date, ForeignKey,
-    Boolean, Text, UniqueConstraint,
+    Boolean, Text, Index, UniqueConstraint,
 )
 from sqlalchemy.orm import relationship
 
@@ -93,19 +93,44 @@ class ImportSource(Base):
     transactions = relationship("Transaction", back_populates="import_source")
 
 
+class Entity(Base):
+    __tablename__ = "entities"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, unique=True, nullable=False)
+    entity_type = Column(String, nullable=False)  # 'household' | 'rental' | 'business' | 'other'
+    color = Column(String, nullable=True)
+    icon = Column(String, nullable=True)
+    is_default = Column(Boolean, default=False)
+    is_active = Column(Boolean, default=True)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    transactions = relationship("Transaction", back_populates="entity")
+    splits = relationship("TransactionSplit", back_populates="entity")
+    rules = relationship("EntityRule", back_populates="entity")
+
+
 class Transaction(Base):
     __tablename__ = "transactions"
+    __table_args__ = (
+        Index("ix_transactions_entity_date", "entity_id", "date"),
+        Index("ix_transactions_date", "date"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     plaid_txn_id = Column(String, unique=True, nullable=True)
     account_id = Column(Integer, ForeignKey("accounts.id"), nullable=False)
     import_source_id = Column(Integer, ForeignKey("import_sources.id"), nullable=True)
+    entity_id = Column(Integer, ForeignKey("entities.id"), nullable=True)
     amount = Column(Float, nullable=False)
     currency = Column(String, default="CAD")
     date = Column(Date, nullable=False)
     name = Column(String, nullable=False)
     merchant_name = Column(String, nullable=True)
     category_id = Column(Integer, ForeignKey("categories.id"), nullable=True)
+    txn_type = Column(String, default="expense")  # 'expense' | 'income' | 'transfer'
+    entity_source = Column(String, nullable=True)  # 'rule' | 'default' | 'manual'
     pending = Column(Boolean, default=False)
     review_status = Column(String, default="confirmed")
     review_source = Column(String, nullable=True)
@@ -119,6 +144,8 @@ class Transaction(Base):
     account = relationship("Account", back_populates="transactions")
     category_rel = relationship("Category", back_populates="transactions")
     import_source = relationship("ImportSource", back_populates="transactions")
+    entity = relationship("Entity", back_populates="transactions")
+    splits = relationship("TransactionSplit", back_populates="transaction", cascade="all, delete-orphan")
 
     @staticmethod
     def compute_dedup_hash(txn_date: date, amount: float, name: str, account_id: int) -> str:
@@ -157,6 +184,46 @@ class Bill(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     category_rel = relationship("Category")
+
+
+class TransactionSplit(Base):
+    __tablename__ = "transaction_splits"
+    __table_args__ = (
+        Index("ix_transaction_splits_entity_id", "entity_id"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    transaction_id = Column(Integer, ForeignKey("transactions.id"), nullable=False)
+    entity_id = Column(Integer, ForeignKey("entities.id"), nullable=False)
+    amount = Column(Float, nullable=False)  # signed, same convention as Transaction.amount
+    percent = Column(Float, nullable=True)  # optional; if set, amount derived from it
+    notes = Column(Text, nullable=True)
+
+    transaction = relationship("Transaction", back_populates="splits")
+    entity = relationship("Entity", back_populates="splits")
+
+
+class EntityRule(Base):
+    __tablename__ = "entity_rules"
+
+    id = Column(Integer, primary_key=True)
+    entity_id = Column(Integer, ForeignKey("entities.id"), nullable=False)
+    field = Column(String, nullable=False)     # 'name' | 'merchant_name' | 'account_id' | 'category_id'
+    operator = Column(String, nullable=False)  # 'contains' | 'equals' | 'starts_with'
+    value = Column(String, nullable=False)
+    priority = Column(Integer, default=100)    # lower runs first; first match wins
+    is_active = Column(Boolean, default=True)
+
+    entity = relationship("Entity", back_populates="rules")
+
+
+class SavedView(Base):
+    __tablename__ = "saved_views"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String, unique=True, nullable=False)
+    config = Column(Text, nullable=False)  # JSON: filters, sort, visible columns, grouping
+    created_at = Column(DateTime, default=datetime.utcnow)
 
 
 class User(Base):

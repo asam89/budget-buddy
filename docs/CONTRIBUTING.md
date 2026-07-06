@@ -71,10 +71,11 @@ source .venv/bin/activate
 python -m pytest tests/ -v
 ```
 
-All 19 regression tests must pass:
+All regression tests must pass:
 - Dedup logic (hash determinism, reimport produces 0 duplicates)
 - Import parsing (CSV, Excel, column detection, date formats)
 - Analytics math (income/expense totals, budget-vs-actual, pending exclusion)
+- Entity tests (CRUD, splits, rules, per-entity aggregation, backfill)
 
 ### 4. Commit and push
 
@@ -120,7 +121,7 @@ budget-buddy/
 │   ├── main.py              # FastAPI entry point
 │   ├── config.py             # Pydantic settings (.env loading)
 │   ├── database.py           # SQLCipher engine setup
-│   ├── models.py             # SQLAlchemy ORM models (8 tables)
+│   ├── models.py             # SQLAlchemy ORM models (12 tables)
 │   ├── schemas.py            # Pydantic request/response schemas
 │   ├── routers/
 │   │   ├── auth.py           # Login, setup, session management
@@ -131,7 +132,8 @@ budget-buddy/
 │   │   ├── bills.py          # Recurring bill entries
 │   │   ├── plaid.py          # Plaid Link integration
 │   │   ├── imports.py        # File upload (CSV/Excel/PDF)
-│   │   └── dashboard.py      # Analytics endpoints
+│   │   ├── entities.py       # Entity CRUD, rules, splits, saved views
+│   │   └── dashboard.py      # Analytics endpoints (per-entity breakdowns)
 │   ├── services/
 │   │   ├── importer.py       # CSV/Excel parsing + dedup
 │   │   └── ai_parser.py      # Claude API statement extraction
@@ -165,8 +167,32 @@ budget-buddy/
 ### Adding a new database table
 
 1. Add the SQLAlchemy model in `app/models.py`
-2. The table is created automatically on startup (`Base.metadata.create_all`)
-3. For production migrations (column changes, not new tables), use Alembic
+2. Create an Alembic migration (see below)
+3. For development, `Base.metadata.create_all` runs on startup, but always create a migration for production
+
+### Database Migrations (Alembic)
+
+Alembic is configured to use the same SQLCipher engine as the app. Migrations live in `alembic/versions/`.
+
+```bash
+# Auto-generate a migration after changing models
+source .venv/bin/activate
+alembic revision --autogenerate -m "describe your change"
+
+# Apply all pending migrations
+alembic upgrade head
+
+# Rollback one step
+alembic downgrade -1
+
+# View current migration state
+alembic current
+```
+
+Key notes:
+- All migrations use `render_as_batch=True` for SQLite compatibility (ALTER TABLE support)
+- Always test migrations on a copy of your DB before running on production
+- Migrations are reversible — each has both `upgrade()` and `downgrade()`
 
 ### Adding a new frontend page
 
@@ -181,7 +207,8 @@ budget-buddy/
 
 We follow [Semantic Versioning](https://semver.org/):
 
-- **v1.0.0** — Current: single-user, local deployment
+- **v1.0.0** — Single-user, local deployment
+- **v1.0.1** — Entity ledgers, transaction splits, auto-tagging rules, Alembic migrations
 - **v1.1.0** — Planned: multi-user support, user registration
 - **v1.2.0** — Planned: Google Sheets import, enhanced analytics
 - **v2.0.0** — Planned: cloud-hosted option for public users
