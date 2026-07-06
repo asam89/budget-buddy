@@ -57,6 +57,11 @@ class AccountCreate(BaseModel):
     currency: str = "CAD"
 
 
+class AccountEntityMapRequest(BaseModel):
+    entity_id: int
+    priority: int = 10  # account rules are high priority by default
+
+
 # --- Categories ---
 class CategoryOut(BaseModel):
     id: int

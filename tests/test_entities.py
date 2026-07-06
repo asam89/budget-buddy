@@ -132,7 +132,7 @@ def test_split_replaces_entity_id(db_session):
 # ---- Entity Rules ----
 
 def test_rule_equals_match(db_session):
-    from app.routers.entities import _match_rule
+    from app.services.rule_engine import match_rule
 
     house, airbnb = _seed_entities(db_session)
     acct = _make_account(db_session)
@@ -143,11 +143,12 @@ def test_rule_equals_match(db_session):
         entity_id=airbnb.id, field="name", operator="equals", value="grocery store",
         priority=100, is_active=True,
     )
-    assert _match_rule(rule, txn) is True
+    fields = {"name": txn.name, "merchant_name": txn.merchant_name, "account_id": txn.account_id, "category_id": txn.category_id}
+    assert match_rule(rule, fields) is True
 
 
 def test_rule_contains_match(db_session):
-    from app.routers.entities import _match_rule
+    from app.services.rule_engine import match_rule
 
     house, airbnb = _seed_entities(db_session)
     acct = _make_account(db_session)
@@ -158,11 +159,12 @@ def test_rule_contains_match(db_session):
         entity_id=airbnb.id, field="name", operator="contains", value="airbnb",
         priority=100, is_active=True,
     )
-    assert _match_rule(rule, txn) is True
+    fields = {"name": txn.name, "merchant_name": txn.merchant_name, "account_id": txn.account_id, "category_id": txn.category_id}
+    assert match_rule(rule, fields) is True
 
 
 def test_rule_starts_with_match(db_session):
-    from app.routers.entities import _match_rule
+    from app.services.rule_engine import match_rule
 
     house, airbnb = _seed_entities(db_session)
     acct = _make_account(db_session)
@@ -173,11 +175,12 @@ def test_rule_starts_with_match(db_session):
         entity_id=airbnb.id, field="name", operator="starts_with", value="airbnb",
         priority=100, is_active=True,
     )
-    assert _match_rule(rule, txn) is True
+    fields = {"name": txn.name, "merchant_name": txn.merchant_name, "account_id": txn.account_id, "category_id": txn.category_id}
+    assert match_rule(rule, fields) is True
 
 
 def test_rule_account_id_match(db_session):
-    from app.routers.entities import _match_rule
+    from app.services.rule_engine import match_rule
 
     house, airbnb = _seed_entities(db_session)
     acct = _make_account(db_session, name="Airbnb CC")
@@ -188,11 +191,12 @@ def test_rule_account_id_match(db_session):
         entity_id=airbnb.id, field="account_id", operator="equals", value=str(acct.id),
         priority=100, is_active=True,
     )
-    assert _match_rule(rule, txn) is True
+    fields = {"name": txn.name, "merchant_name": txn.merchant_name, "account_id": txn.account_id, "category_id": txn.category_id}
+    assert match_rule(rule, fields) is True
 
 
 def test_rule_no_match(db_session):
-    from app.routers.entities import _match_rule
+    from app.services.rule_engine import match_rule
 
     house, airbnb = _seed_entities(db_session)
     acct = _make_account(db_session)
@@ -203,12 +207,13 @@ def test_rule_no_match(db_session):
         entity_id=airbnb.id, field="name", operator="equals", value="grocery store",
         priority=100, is_active=True,
     )
-    assert _match_rule(rule, txn) is False
+    fields = {"name": txn.name, "merchant_name": txn.merchant_name, "account_id": txn.account_id, "category_id": txn.category_id}
+    assert match_rule(rule, fields) is False
 
 
 def test_rule_priority_first_match_wins(db_session):
     """Lower priority number runs first; first match wins."""
-    from app.routers.entities import _match_rule
+    from app.services.rule_engine import match_rule
 
     house, airbnb = _seed_entities(db_session)
     biz = Entity(name="Business", entity_type="business")
@@ -228,11 +233,11 @@ def test_rule_priority_first_match_wins(db_session):
         priority=100, is_active=True,
     )
 
-    # Simulate rule application in priority order
+    fields = {"name": txn.name, "merchant_name": txn.merchant_name, "account_id": txn.account_id, "category_id": txn.category_id}
     rules_sorted = sorted([rule_airbnb, rule_biz], key=lambda r: r.priority)
     matched_entity = None
     for rule in rules_sorted:
-        if _match_rule(rule, txn):
+        if match_rule(rule, fields):
             matched_entity = rule.entity_id
             break
 
@@ -337,7 +342,7 @@ def test_migration_backfill_all_txns_to_default_entity(db_session):
 
 def test_retroactive_rule_dry_run_vs_commit(db_session):
     """Dry run should preview matches; commit should update them."""
-    from app.routers.entities import _match_rule
+    from app.services.rule_engine import match_rule
 
     house, airbnb = _seed_entities(db_session)
     acct = _make_account(db_session)
@@ -368,8 +373,9 @@ def test_retroactive_rule_dry_run_vs_commit(db_session):
     for txn in candidates:
         if txn.splits:
             continue
+        fields = {"name": txn.name, "merchant_name": txn.merchant_name, "account_id": txn.account_id, "category_id": txn.category_id}
         for r in rules:
-            if _match_rule(r, txn):
+            if match_rule(r, fields):
                 matched.append(txn)
                 break
 
