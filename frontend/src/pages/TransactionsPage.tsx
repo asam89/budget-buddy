@@ -19,6 +19,9 @@ import {
   inlineEditTransaction,
   bulkAssignEntity,
   deleteTransaction,
+  exportTransactionsCsv,
+  exportTransactionsXlsx,
+  exportFullWorkbook,
   Transaction,
   TransactionTotals,
   Account,
@@ -35,6 +38,8 @@ import {
   Search,
   Filter,
   Bookmark,
+  Download,
+  FileSpreadsheet,
 } from "lucide-react";
 
 function fmt(n: number) {
@@ -538,6 +543,38 @@ export default function TransactionsPage() {
           >
             <Save size={14} />
             Save View
+          </button>
+          <button
+            onClick={() => {
+              const params: Record<string, string> = {};
+              Object.entries(filters).forEach(([k, v]) => { if (v) params[k] = v; });
+              exportTransactionsCsv(params);
+            }}
+            className="flex items-center gap-1 bg-gray-800 border border-gray-600 rounded-lg px-3 py-1.5 text-sm hover:bg-gray-700"
+            title="Export filtered transactions as CSV"
+          >
+            <Download size={14} />
+            CSV
+          </button>
+          <button
+            onClick={() => {
+              const params: Record<string, string> = {};
+              Object.entries(filters).forEach(([k, v]) => { if (v) params[k] = v; });
+              exportTransactionsXlsx(params);
+            }}
+            className="flex items-center gap-1 bg-gray-800 border border-gray-600 rounded-lg px-3 py-1.5 text-sm hover:bg-gray-700"
+            title="Export filtered transactions as XLSX"
+          >
+            <FileSpreadsheet size={14} />
+            XLSX
+          </button>
+          <button
+            onClick={() => exportFullWorkbook()}
+            className="flex items-center gap-1 bg-emerald-600 hover:bg-emerald-700 border border-emerald-500 rounded-lg px-3 py-1.5 text-sm"
+            title="Export full workbook (all data + pivot sheets)"
+          >
+            <FileSpreadsheet size={14} />
+            Full Export
           </button>
           <button
             onClick={() => setShowFilters(!showFilters)}

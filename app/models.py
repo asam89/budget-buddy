@@ -93,6 +93,16 @@ class ImportSource(Base):
     transactions = relationship("Transaction", back_populates="import_source")
 
 
+class ImportTemplate(Base):
+    __tablename__ = "import_templates"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False)
+    header_signature = Column(String, unique=True, nullable=False)  # hash of sorted header names
+    mapping = Column(Text, nullable=False)  # JSON: column mapping config
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 class Entity(Base):
     __tablename__ = "entities"
 
@@ -224,6 +234,14 @@ class SavedView(Base):
     name = Column(String, unique=True, nullable=False)
     config = Column(Text, nullable=False)  # JSON: filters, sort, visible columns, grouping
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class AppSetting(Base):
+    __tablename__ = "app_settings"
+
+    key = Column(String, primary_key=True)
+    value = Column(Text, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
 class User(Base):

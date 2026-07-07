@@ -1,3 +1,5 @@
+"""AI-powered statement parsing — uses LLMProvider abstraction."""
+
 import hashlib
 import io
 import json
@@ -7,7 +9,8 @@ from datetime import date, datetime
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
-from app.models import Transaction, ImportSource
+from app.models import Transaction, ImportSource, AppSetting
+from app.services.llm import get_provider, LLMProvider
 from app.services.rule_engine import apply_rules_to_transaction, infer_txn_type
 
 logger = logging.getLogger(__name__)
@@ -27,25 +30,51 @@ Statement text:
 {text}"""
 
 
+def _get_llm_provider(db: Session) -> LLMProvider | None:
+    """Build LLM provider from config, with DB overrides."""
+    settings = get_settings()
+
+    # DB settings override env vars
+    provider_name = settings.llm_provider
+    ollama_model = settings.ollama_model
+    ollama_base_url = settings.ollama_base_url
+
+    for row in db.query(AppSetting).filter(
+        AppSetting.key.in_(["llm_provider", "ollama_model", "ollama_base_url"])
+    ).all():
+        if row.key == "llm_provider":
+            provider_name = row.value
+        elif row.key == "ollama_model":
+            ollama_model = row.value
+        elif row.key == "ollama_base_url":
+            ollama_base_url = row.value
+
+    return get_provider(
+        provider_name=provider_name,
+        ollama_base_url=ollama_base_url,
+        ollama_model=ollama_model,
+        anthropic_api_key=settings.anthropic_api_key,
+        llm_timeout=settings.llm_timeout_seconds,
+    )
+
+
 def parse_statement_text(
     db: Session,
     text: str,
     filename: str,
     account_id: int,
 ) -> ImportSource:
-    settings = get_settings()
-    if not settings.anthropic_api_key:
+    provider = _get_llm_provider(db)
+    if not provider:
         source = ImportSource(
             source_type="pdf",
             filename=filename,
             status="failed",
-            error_message="ANTHROPIC_API_KEY not configured",
+            error_message="No LLM provider configured (set LLM_PROVIDER and ensure Ollama is running or ANTHROPIC_API_KEY is set)",
         )
         db.add(source)
         db.commit()
         return source
-
-    import anthropic
 
     content_hash = hashlib.sha256(text.encode()).hexdigest()
 
@@ -59,20 +88,11 @@ def parse_statement_text(
     db.flush()
 
     try:
-        client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
-        message = client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=4096,
-            messages=[
-                {"role": "user", "content": EXTRACTION_PROMPT.format(text=text[:8000])}
-            ],
-        )
+        prompt = EXTRACTION_PROMPT.format(text=text[:8000])
+        transactions_data = provider.complete_json(prompt)
 
-        response_text = message.content[0].text.strip()
-        if response_text.startswith("```"):
-            response_text = response_text.split("\n", 1)[1].rsplit("```", 1)[0]
-
-        transactions_data = json.loads(response_text)
+        if not isinstance(transactions_data, list):
+            raise ValueError(f"Expected JSON array, got {type(transactions_data).__name__}")
 
         added = 0
         for item in transactions_data:
@@ -114,7 +134,7 @@ def parse_statement_text(
 
     except json.JSONDecodeError as e:
         source.status = "failed"
-        source.error_message = f"Failed to parse AI response as JSON: {e}"
+        source.error_message = f"Failed to parse LLM response as JSON: {e}"
         db.commit()
     except Exception as e:
         logger.exception("AI parsing failed")
