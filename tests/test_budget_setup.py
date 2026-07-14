@@ -77,6 +77,20 @@ def test_parse_budget_dataframe_currency_symbols():
     assert items[0]["amount"] == 2200.0
 
 
+def test_parse_budget_dataframe_wide_grid_duplicate_headers():
+    # Regression: a wide budget-vs-actual grid whose header row repeats labels
+    # (e.g. month columns) used to crash clean_dataframe with
+    # "'DataFrame' object has no attribute 'dtype'". Should parse, not raise.
+    df = pd.DataFrame([
+        ["", "Jan", "Jan", "Feb"],
+        ["Rent", "2200", "2200", "2200"],
+        ["Groceries", "800", "800", "800"],
+    ])
+    items = parse_budget_dataframe(df)
+    labels = {i["label"] for i in items}
+    assert {"Rent", "Groceries"} <= labels
+
+
 # ---- period normalization ----
 
 def test_normalize_to_monthly():
@@ -256,6 +270,21 @@ def test_analyze_paste_endpoint(client):
 def test_analyze_paste_empty(client):
     resp = client.post("/api/budget-setup/analyze-paste", data={"text": "   "})
     assert resp.status_code == 400
+
+
+def test_analyze_paste_wide_grid_does_not_500(client):
+    # A wide budget-vs-actual grid pasted from Excel (repeated month headers)
+    # must not 500; it either parses or returns a readable 422.
+    tsv = (
+        "\tJan\tJan\tFeb\n"
+        "Rent\t2200\t2200\t2200\n"
+        "Groceries\t800\t800\t800\n"
+    )
+    fake = FakeProvider([])
+    with patch("app.services.budget_setup._get_llm_provider", return_value=fake):
+        resp = client.post("/api/budget-setup/analyze-paste", data={"text": tsv})
+    assert resp.status_code != 500
+    assert resp.status_code in (200, 422)
 
 
 def test_commit_endpoint(client):

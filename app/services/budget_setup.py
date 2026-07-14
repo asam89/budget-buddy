@@ -66,6 +66,26 @@ Input line items:
 """
 
 
+def _unique_columns(header) -> list[str]:
+    """Build unique column names from a header row.
+
+    Wide pasted grids (e.g. repeated month headers or blank cells) produce
+    duplicate names; without disambiguation ``df[name]`` returns a DataFrame
+    instead of a Series and downstream ``.dtype`` access crashes.
+    """
+    seen: dict[str, int] = {}
+    names: list[str] = []
+    for c in header:
+        base = str(c).strip()
+        if base in seen:
+            seen[base] += 1
+            names.append(f"{base}.{seen[base]}")
+        else:
+            seen[base] = 0
+            names.append(base)
+    return names
+
+
 def parse_budget_dataframe(df_raw: pd.DataFrame) -> list[dict]:
     """Extract raw budget line items (label, amount, period hint) from a sheet.
 
@@ -75,10 +95,10 @@ def parse_budget_dataframe(df_raw: pd.DataFrame) -> list[dict]:
     header_row = detect_header_row(df_raw)
     if header_row > 0:
         df = df_raw.iloc[header_row + 1:].reset_index(drop=True)
-        df.columns = [str(c).strip() for c in df_raw.iloc[header_row]]
+        df.columns = _unique_columns(df_raw.iloc[header_row])
     else:
         df = df_raw.copy()
-        df.columns = [str(c).strip() for c in df_raw.iloc[0]]
+        df.columns = _unique_columns(df_raw.iloc[0])
         df = df.iloc[1:].reset_index(drop=True)
 
     df = clean_dataframe(df)
