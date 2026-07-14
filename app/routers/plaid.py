@@ -14,6 +14,7 @@ from app.config import get_settings
 from app.database import get_db
 from app.models import PlaidItem, Account, Institution, Transaction
 from app.schemas import PlaidLinkTokenResponse, PlaidExchangeRequest
+from app.services.rule_engine import apply_rules_to_transaction, infer_txn_type
 
 router = APIRouter(prefix="/api/plaid", tags=["plaid"])
 
@@ -147,18 +148,23 @@ def sync_transactions(db: Session = Depends(get_db)):
                 if txn.get("personal_finance_category"):
                     category = txn["personal_finance_category"].get("primary")
 
+                # Plaid convention: positive amounts = money leaving account (expenses)
+                amount = txn["amount"]
                 transaction = Transaction(
                     plaid_transaction_id=txn["transaction_id"],
                     account_id=account.id,
-                    amount=txn["amount"],
+                    amount=amount,
                     currency=txn.get("iso_currency_code", "CAD") or "CAD",
                     date=txn["date"],
                     name=txn["name"],
                     merchant_name=txn.get("merchant_name"),
                     category=category,
+                    txn_type=infer_txn_type(amount),
                     pending=txn.get("pending", False),
                 )
                 db.add(transaction)
+                db.flush()
+                apply_rules_to_transaction(db, transaction)
                 total_added += 1
 
             cursor = response["next_cursor"]

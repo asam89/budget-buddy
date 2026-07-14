@@ -4,8 +4,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import Account, User
-from app.schemas import AccountOut, AccountCreate
+from app.models import Account, Entity, EntityRule, User
+from app.schemas import AccountOut, AccountCreate, AccountEntityMapRequest, EntityRuleOut
 from app.utils.auth import get_current_user
 
 router = APIRouter(prefix="/api/accounts", tags=["accounts"])
@@ -66,3 +66,50 @@ def deactivate_account(
         raise HTTPException(status_code=404, detail="Account not found")
     account.is_active = False
     db.commit()
+
+
+@router.post("/{account_id}/entity", response_model=EntityRuleOut, status_code=201)
+def map_account_to_entity(
+    account_id: int,
+    data: AccountEntityMapRequest,
+    db: Session = Depends(get_db),
+    _user: User = Depends(get_current_user),
+):
+    """One-click: create an account_id→entity rule (e.g., 'everything on this
+    Airbnb credit card goes to the Airbnb entity').
+    """
+    account = db.query(Account).filter(Account.id == account_id).first()
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+
+    entity = db.query(Entity).filter(Entity.id == data.entity_id).first()
+    if not entity:
+        raise HTTPException(status_code=404, detail="Entity not found")
+
+    existing = (
+        db.query(EntityRule)
+        .filter(
+            EntityRule.field == "account_id",
+            EntityRule.operator == "equals",
+            EntityRule.value == str(account_id),
+        )
+        .first()
+    )
+    if existing:
+        existing.entity_id = data.entity_id
+        existing.is_active = True
+        db.commit()
+        db.refresh(existing)
+        return existing
+
+    rule = EntityRule(
+        entity_id=data.entity_id,
+        field="account_id",
+        operator="equals",
+        value=str(account_id),
+        priority=data.priority,
+    )
+    db.add(rule)
+    db.commit()
+    db.refresh(rule)
+    return rule

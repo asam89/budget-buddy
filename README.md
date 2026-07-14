@@ -8,9 +8,12 @@ A locally-hosted personal finance dashboard. All financial data stays on your ma
 - **Data import** from CSV, Excel, PDF bank statements (AI-parsed via Claude)
 - **Dedup** prevents duplicate transactions on re-import
 - **AI review gate** - AI-parsed transactions are flagged "needs review" and never auto-committed
-- **Spending analytics** with category breakdowns, monthly trends, and budget-vs-actual tracking
+- **Entity ledgers** — track House, Airbnb, Business etc. independently or combined; split shared expenses across entities
+- **Auto-tagging rules** — assign transactions to entities automatically based on account, name, or merchant
+- **Spending analytics** with category breakdowns, monthly trends, budget-vs-actual, and per-entity breakdowns
 - **Local dashboard** accessible from any device on your home network
 - **Auth gate** with bcrypt-hashed passwords and signed session cookies
+- **Database migrations** via Alembic (reversible, SQLite-compatible)
 
 ## Quick Start
 
@@ -43,7 +46,7 @@ Open http://localhost:8000 — on first visit, create your admin account.
 |-------|-----------|
 | Backend | Python 3.10+ / FastAPI |
 | Database | SQLite + SQLCipher (encrypted) |
-| ORM | SQLAlchemy 2.x |
+| ORM | SQLAlchemy 2.x + Alembic |
 | Frontend | React 18 + Vite + Tailwind CSS + Recharts |
 | Financial data | Plaid API |
 | AI parsing | Anthropic Claude API |
@@ -56,12 +59,13 @@ source .venv/bin/activate
 python -m pytest tests/ -v
 ```
 
-19 regression tests covering: dedup logic, CSV/Excel import parsing, and analytics aggregation math.
+34 regression tests covering: dedup logic, CSV/Excel import parsing, analytics aggregation math, entity CRUD, transaction splits, rule matching, and per-entity aggregation.
 
 ## Documentation
 
 - **[Deployment Guide](docs/DEPLOYMENT.md)** — Full setup instructions for Mac and Windows, auto-start on boot, security checklist, updating to new versions
 - **[Contributing & Development](docs/CONTRIBUTING.md)** — Branching strategy, dev setup, project structure, versioning, multi-user roadmap
+- **[Entities & Rules](docs/ENTITIES.md)** — Entity model, transaction splits, auto-tagging rules, API reference
 
 ## API Docs
 
