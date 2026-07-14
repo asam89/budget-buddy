@@ -444,6 +444,18 @@ export interface DashboardSummary {
   spending_by_category: Record<string, number>;
   monthly_trend: { month: string; income: number; expenses: number; net: number }[];
   budget_status: { category: string; budget: number; spent: number; remaining: number; percent_used: number }[];
+  saved: SavedSummary;
+}
+
+export interface SavedSummary {
+  year_month: string;
+  month_income_actual: number;
+  month_expense_actual: number;
+  month_saved_actual: number;
+  month_saved_budget: number;
+  ytd_saved_actual: number;
+  ytd_through_month: number;
+  year_saved_budget: number;
 }
 
 export interface BalanceItem {

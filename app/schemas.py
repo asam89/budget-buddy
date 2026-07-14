@@ -347,6 +347,18 @@ class ImportSourceOut(BaseModel):
 
 
 # --- Dashboard ---
+class SavedSummary(BaseModel):
+    """Total-saved figures, all derived from the shared aggregation layer."""
+    year_month: str
+    month_income_actual: float
+    month_expense_actual: float
+    month_saved_actual: float
+    month_saved_budget: float
+    ytd_saved_actual: float
+    ytd_through_month: int
+    year_saved_budget: float
+
+
 class DashboardSummary(BaseModel):
     total_balance: float
     total_income: float
@@ -357,3 +369,4 @@ class DashboardSummary(BaseModel):
     spending_by_category: dict[str, float]
     monthly_trend: list[dict]
     budget_status: list[dict]
+    saved: SavedSummary

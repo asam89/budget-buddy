@@ -6,7 +6,8 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import Account, Transaction, TransactionSplit, Budget, Category, Entity, User
-from app.schemas import DashboardSummary, TransactionOut
+from app.schemas import DashboardSummary, SavedSummary, TransactionOut
+from app.services.aggregation import month_totals, year_summary
 from app.utils.auth import get_current_user
 
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
@@ -63,6 +64,7 @@ def get_dashboard_summary(
 
     monthly_trend = _compute_monthly_trend(db, months, entity_id)
     budget_status = _compute_budget_status(db, entity_id)
+    saved = _compute_saved(db, now.date())
 
     recent = transactions[:10]
 
@@ -76,6 +78,29 @@ def get_dashboard_summary(
         spending_by_category={k: _format_currency(v) for k, v in spending_by_category.items()},
         monthly_trend=monthly_trend,
         budget_status=budget_status,
+        saved=saved,
+    )
+
+
+def _compute_saved(db: Session, today: date) -> SavedSummary:
+    """Total-saved header figures via the shared aggregation (income - expenses).
+
+    Reads the same ``effective_actual`` path as the Budgets/Income pages so all
+    three surfaces agree. Current-year YTD actual is kept separate from the
+    full-year budgeted saved. Negative saved is preserved (overspent), not clamped.
+    """
+    year_month = today.strftime("%Y-%m")
+    mt = month_totals(db, year_month)
+    ys = year_summary(db, today.year, today=today)
+    return SavedSummary(
+        year_month=year_month,
+        month_income_actual=_format_currency(mt.income_actual),
+        month_expense_actual=_format_currency(mt.expense_actual),
+        month_saved_actual=_format_currency(mt.saved_actual),
+        month_saved_budget=_format_currency(mt.saved_budget),
+        ytd_saved_actual=_format_currency(ys.saved_actual_ytd),
+        ytd_through_month=ys.ytd_through_month,
+        year_saved_budget=_format_currency(ys.saved_budget_year),
     )
 
 
