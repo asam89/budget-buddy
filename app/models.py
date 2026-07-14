@@ -68,6 +68,7 @@ class Category(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, unique=True, nullable=False)
     parent_id = Column(Integer, ForeignKey("categories.id"), nullable=True)
+    kind = Column(String, nullable=False, default="expense")  # 'expense' | 'income'
     icon = Column(String, nullable=True)
     color = Column(String, nullable=True)
     is_system = Column(Boolean, default=False)
@@ -76,6 +77,7 @@ class Category(Base):
     parent = relationship("Category", remote_side=[id])
     transactions = relationship("Transaction", back_populates="category_rel")
     budgets = relationship("Budget", back_populates="category_rel")
+    manual_actuals = relationship("ManualActual", back_populates="category_rel")
 
 
 class ImportSource(Base):
@@ -175,6 +177,30 @@ class Budget(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     category_rel = relationship("Category", back_populates="budgets")
+
+
+class ManualActual(Base):
+    """A user-entered actual for one category in one month.
+
+    Stored non-negative; the sign is derived from ``Category.kind`` (income
+    adds, expense subtracts) so the user never types a sign. Exactly one row
+    per (category, year_month). Never written by imports, rules, or jobs.
+    """
+
+    __tablename__ = "manual_actuals"
+    __table_args__ = (
+        UniqueConstraint("category_id", "year_month", name="uq_manual_actual_category_month"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    category_id = Column(Integer, ForeignKey("categories.id"), nullable=False)
+    year_month = Column(String, nullable=False)  # "YYYY-MM"
+    amount = Column(Float, nullable=False)  # >= 0
+    note = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    category_rel = relationship("Category", back_populates="manual_actuals")
 
 
 class Bill(Base):

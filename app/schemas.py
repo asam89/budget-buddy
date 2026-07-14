@@ -1,7 +1,7 @@
 from datetime import datetime, date
 from typing import Optional
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 
 # --- Auth ---
@@ -67,6 +67,7 @@ class CategoryOut(BaseModel):
     id: int
     name: str
     parent_id: Optional[int]
+    kind: str
     icon: Optional[str]
     color: Optional[str]
     is_system: bool
@@ -75,6 +76,7 @@ class CategoryOut(BaseModel):
 
 class CategoryCreate(BaseModel):
     name: str
+    kind: str = "expense"
     parent_id: Optional[int] = None
     icon: Optional[str] = None
     color: Optional[str] = None
@@ -265,6 +267,24 @@ class BudgetCreate(BaseModel):
     category_id: int
     monthly_limit: float
     year_month: Optional[str] = None
+
+
+# --- Manual actuals ---
+class ManualActualUpsert(BaseModel):
+    category_id: int
+    year_month: str
+    amount: float = Field(ge=0)
+    note: Optional[str] = None
+
+
+class ManualActualBulkEntry(BaseModel):
+    category_id: int
+    year_month: str
+    amount: float = Field(ge=0)
+
+
+class ManualActualBulk(BaseModel):
+    entries: list[ManualActualBulkEntry]
 
 
 # --- Bills ---

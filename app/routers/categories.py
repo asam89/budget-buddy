@@ -15,6 +15,8 @@ DEFAULT_CATEGORIES = [
     "Investment Income", "Refund", "Transfer", "Other",
 ]
 
+_INCOME_CATEGORY_NAMES = {"Salary", "Freelance", "Investment Income"}
+
 
 @router.post("/seed-defaults", response_model=list[CategoryOut])
 def seed_defaults(
@@ -25,7 +27,8 @@ def seed_defaults(
     for name in DEFAULT_CATEGORIES:
         existing = db.query(Category).filter(Category.name == name).first()
         if not existing:
-            cat = Category(name=name, is_system=True)
+            kind = "income" if name in _INCOME_CATEGORY_NAMES else "expense"
+            cat = Category(name=name, kind=kind, is_system=True)
             db.add(cat)
             created.append(cat)
     db.commit()
@@ -52,8 +55,10 @@ def create_category(
     if existing:
         raise HTTPException(status_code=409, detail="Category already exists")
 
+    kind = data.kind if data.kind in ("expense", "income") else "expense"
     cat = Category(
         name=data.name,
+        kind=kind,
         parent_id=data.parent_id,
         icon=data.icon,
         color=data.color,

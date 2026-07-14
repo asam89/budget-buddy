@@ -9,7 +9,7 @@ from app.database import engine, ensure_schema
 from app.routers import (
     auth, accounts, transactions, plaid, dashboard,
     categories, budgets, bills, imports, entities, reports, export, settings,
-    budget_setup,
+    budget_setup, actuals,
 )
 
 
@@ -40,6 +40,7 @@ app.include_router(reports.router)
 app.include_router(export.router)
 app.include_router(settings.router)
 app.include_router(budget_setup.router)
+app.include_router(actuals.router)
 
 # Serve the React frontend
 frontend_dist = Path(__file__).parent.parent / "frontend" / "dist"

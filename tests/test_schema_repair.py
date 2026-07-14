@@ -5,7 +5,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
 from app.database import ensure_schema
-from app.models import Transaction
+from app.models import Category, ManualActual, Transaction
 
 
 def _old_transactions_engine(tmp_path):
@@ -69,3 +69,30 @@ def test_ensure_schema_creates_missing_tables(tmp_path):
     tables = set(inspect(engine).get_table_names())
     # New tables introduced alongside the transaction columns are created too.
     assert {"entities", "transaction_splits", "entity_rules", "saved_views"} <= tables
+
+
+def test_ensure_schema_adds_category_kind_and_manual_actuals(tmp_path):
+    """A pre-manual-actuals DB: categories without `kind`, no manual_actuals."""
+    engine = create_engine(
+        f"sqlite:///{tmp_path / 'old.db'}",
+        connect_args={"check_same_thread": False},
+    )
+    with engine.begin() as conn:
+        conn.execute(text(
+            "CREATE TABLE categories ("
+            "id INTEGER PRIMARY KEY, name VARCHAR NOT NULL, parent_id INTEGER, "
+            "icon VARCHAR, color VARCHAR, is_system BOOLEAN, created_at DATETIME)"
+        ))
+        conn.execute(text("INSERT INTO categories (name) VALUES ('Groceries')"))
+
+    ensure_schema(engine)
+
+    session = sessionmaker(bind=engine)()
+    # Existing row survives and is backfilled to 'expense'.
+    cat = session.query(Category).filter(Category.name == "Groceries").one()
+    assert cat.kind == "expense"
+    # New manual_actuals table is usable.
+    session.add(ManualActual(category_id=cat.id, year_month="2026-07", amount=100.0))
+    session.commit()
+    assert session.query(ManualActual).count() == 1
+    session.close()

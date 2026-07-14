@@ -13,7 +13,7 @@ from app.database import Base, engine  # noqa: E402
 from app.models import (  # noqa: E402, F401 — import all models so metadata is populated
     Institution, PlaidItem, Account, Category, ImportSource,
     Entity, Transaction, TransactionSplit, EntityRule, SavedView,
-    Budget, Bill, User,
+    Budget, Bill, User, ManualActual,
 )
 
 config = context.config
