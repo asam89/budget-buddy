@@ -10,7 +10,6 @@ async function request<T>(path: string, opts?: RequestInit): Promise<T> {
     credentials: "same-origin",
   });
   if (res.status === 401) {
-    window.location.href = "/login";
     throw new Error("Not authenticated");
   }
   if (!res.ok) {
