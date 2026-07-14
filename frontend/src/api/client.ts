@@ -111,7 +111,67 @@ export const exportFullWorkbook = () => {
   window.open(`${BASE}/export/full`, "_blank");
 };
 
+// LLM / model
+export const getLlmHealth = () => request<LlmHealth>("/settings/llm/health");
+
+// Budget Setup (AI-assisted)
+export const analyzeBudgetFile = (file: File) => {
+  const form = new FormData();
+  form.append("file", file);
+  return request<BudgetProposal>("/budget-setup/analyze", { method: "POST", body: form });
+};
+export const analyzeBudgetPaste = (text: string) => {
+  const form = new FormData();
+  form.append("text", text);
+  return request<BudgetProposal>("/budget-setup/analyze-paste", { method: "POST", body: form });
+};
+export const commitBudgetSetup = (items: BudgetCommitItem[]) =>
+  request<BudgetCommitResult>("/budget-setup/commit", {
+    method: "POST",
+    body: JSON.stringify({ items }),
+  });
+
 // Types
+export interface LlmHealth {
+  provider_name: string;
+  reachable: boolean;
+  model_available: boolean;
+  latency_ms: number;
+  error: string | null;
+}
+
+export interface BudgetProposalItem {
+  label: string;
+  source_amount: number;
+  period: string;
+  monthly_amount: number;
+  category: string;
+  kind: string;
+  confidence: number;
+  note: string;
+}
+
+export interface BudgetProposal {
+  ai_used: boolean;
+  assisting_model: string | null;
+  existing_categories: string[];
+  items: BudgetProposalItem[];
+}
+
+export interface BudgetCommitItem {
+  category: string;
+  monthly_amount: number;
+  kind: string;
+}
+
+export interface BudgetCommitResult {
+  categories_created: number;
+  budgets_created: number;
+  budgets_updated: number;
+  income_items_skipped: number;
+  categories_budgeted: number;
+}
+
 export interface Account {
   id: number;
   name: string;
