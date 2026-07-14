@@ -4,6 +4,7 @@ from datetime import date
 
 from app.models import Account, Budget, Category, ManualActual, Transaction
 from app.services.aggregation import (
+    budget_for,
     effective_actual,
     month_totals,
     transaction_sum,
@@ -237,5 +238,49 @@ def test_upsert_rejects_negative_amount(client, db_session):
     db_session.commit()
     resp = client.post("/api/actuals/", json={
         "category_id": cat.id, "year_month": "2026-07", "amount": -5.0,
+    })
+    assert resp.status_code == 422
+
+
+# ---- budget month upsert / fill-forward ----
+
+def test_budget_upsert_creates_then_updates_same_row(client, db_session):
+    cat = Category(name="Groceries", kind="expense")
+    db_session.add(cat)
+    db_session.commit()
+    r1 = client.post("/api/budgets/upsert", json={
+        "category_id": cat.id, "year_month": "2026-07", "monthly_limit": 800.0,
+    })
+    assert r1.status_code == 200
+    r2 = client.post("/api/budgets/upsert", json={
+        "category_id": cat.id, "year_month": "2026-07", "monthly_limit": 900.0,
+    })
+    assert r2.status_code == 200
+    assert budget_for(db_session, cat.id, "2026-07") == 900.0
+    assert db_session.query(Budget).filter(
+        Budget.category_id == cat.id, Budget.year_month == "2026-07"
+    ).count() == 1
+
+
+def test_budget_fill_forward(client, db_session):
+    cat = Category(name="Groceries", kind="expense")
+    db_session.add(cat)
+    db_session.commit()
+    resp = client.post("/api/budgets/fill-forward", json={
+        "category_id": cat.id, "from_year_month": "2026-05", "monthly_limit": 700.0,
+    })
+    assert resp.status_code == 200
+    assert resp.json()["updated"] == 8  # May..Dec
+    assert budget_for(db_session, cat.id, "2026-05") == 700.0
+    assert budget_for(db_session, cat.id, "2026-12") == 700.0
+    assert budget_for(db_session, cat.id, "2026-04") is None  # past month untouched
+
+
+def test_budget_upsert_bad_year_month(client, db_session):
+    cat = Category(name="Groceries", kind="expense")
+    db_session.add(cat)
+    db_session.commit()
+    resp = client.post("/api/budgets/upsert", json={
+        "category_id": cat.id, "year_month": "2026-13", "monthly_limit": 100.0,
     })
     assert resp.status_code == 422
