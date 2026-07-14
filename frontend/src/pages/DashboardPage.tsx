@@ -16,11 +16,49 @@ function fmt(n: number) {
 
 export default function DashboardPage() {
   const [data, setData] = useState<DashboardSummary | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [months, setMonths] = useState(3);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
-    getDashboard(months).then(setData);
-  }, [months]);
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    getDashboard(months)
+      .then((d) => {
+        if (!cancelled) setData(d);
+      })
+      .catch((e) => {
+        if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load dashboard");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [months, reloadKey]);
+
+  if (loading && !data) return <div className="text-gray-400">Loading dashboard...</div>;
+
+  if (error && !data) {
+    return (
+      <div className="max-w-lg space-y-3">
+        <h2 className="text-2xl font-bold">Dashboard</h2>
+        <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4 text-sm text-red-400">
+          <p className="font-medium">Couldn't load the dashboard.</p>
+          <p className="mt-1 text-red-300/90 break-words">{error}</p>
+        </div>
+        <button
+          onClick={() => setReloadKey((k) => k + 1)}
+          className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg text-sm"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
 
   if (!data) return <div className="text-gray-400">Loading dashboard...</div>;
 
