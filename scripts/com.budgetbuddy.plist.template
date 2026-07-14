@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  launchd Launch Agent template for Budget Buddy (macOS).
+
+  Setup:
+    1. Copy this file to ~/Library/LaunchAgents/com.budgetbuddy.plist
+    2. Replace every YOUR_USERNAME with your macOS username (run `whoami`).
+    3. mkdir -p ~/budget-buddy/logs
+    4. launchctl load ~/Library/LaunchAgents/com.budgetbuddy.plist
+
+  Manage:
+    launchctl kickstart -k gui/$(id -u)/com.budgetbuddy   # restart
+    launchctl unload ~/Library/LaunchAgents/com.budgetbuddy.plist  # stop
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.budgetbuddy</string>
+    <key>WorkingDirectory</key>
+    <string>/Users/YOUR_USERNAME/budget-buddy</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/YOUR_USERNAME/budget-buddy/.venv/bin/uvicorn</string>
+        <string>app.main:app</string>
+        <string>--host</string>
+        <string>0.0.0.0</string>
+        <string>--port</string>
+        <string>8000</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/Users/YOUR_USERNAME/budget-buddy/logs/stdout.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/YOUR_USERNAME/budget-buddy/logs/stderr.log</string>
+</dict>
+</plist>
