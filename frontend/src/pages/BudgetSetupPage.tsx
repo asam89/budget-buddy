@@ -1,13 +1,14 @@
-import { useState } from "react";
-import { Sparkles, Upload, ClipboardPaste, Check, Trash2 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Sparkles, Upload, ClipboardPaste, Check, Trash2, Loader2 } from "lucide-react";
 import ModelBadge from "../components/ModelBadge";
 import {
-  analyzeBudgetFile,
-  analyzeBudgetPaste,
+  analyzeBudgetFileStream,
+  analyzeBudgetPasteStream,
   commitBudgetSetup,
   BudgetProposal,
   BudgetProposalItem,
   BudgetCommitResult,
+  BudgetAnalyzeEvent,
 } from "../api/client";
 
 const PERIODS = ["monthly", "annual", "quarterly", "weekly", "biweekly", "daily", "unknown"];
@@ -22,6 +23,40 @@ function confColor(c: number) {
   return "text-red-400";
 }
 
+function num(d: Record<string, unknown>, k: string): number {
+  return typeof d[k] === "number" ? (d[k] as number) : 0;
+}
+
+// Human-readable label for a progress event; the "calling_model" step is the
+// slow one, so it's flagged as active until the "model_done" event arrives.
+function stepText(e: BudgetAnalyzeEvent): string {
+  const d = e.detail;
+  switch (e.stage) {
+    case "parsed":
+      return `Parsed ${num(d, "rows")} line items from the sheet`;
+    case "checking_model":
+      return `Checking model ${d.model ?? ""}…`;
+    case "model_status":
+      return d.reachable && d.model_available
+        ? `Model reachable (${num(d, "latency_ms")} ms)`
+        : `Local model unavailable — ${d.error ?? "offline"}`;
+    case "calling_model":
+      return `Asking ${d.model ?? "the model"} to categorize ${num(d, "rows")} rows (this is the slow step)…`;
+    case "model_done":
+      return `Model responded in ${(num(d, "elapsed_ms") / 1000).toFixed(1)} s (${num(d, "items_returned")} items)`;
+    case "model_error":
+      return `Model error after ${(num(d, "elapsed_ms") / 1000).toFixed(1)} s: ${d.error ?? ""} — falling back to rules`;
+    case "heuristic":
+      return "Using rule-based fallback (no local model)";
+    case "normalizing":
+      return "Normalizing amounts to monthly figures…";
+    case "complete":
+      return "Done";
+    default:
+      return e.stage;
+  }
+}
+
 export default function BudgetSetupPage() {
   const [mode, setMode] = useState<"upload" | "paste">("upload");
   const [pasteText, setPasteText] = useState("");
@@ -30,13 +65,31 @@ export default function BudgetSetupPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<BudgetCommitResult | null>(null);
+  const [steps, setSteps] = useState<BudgetAnalyzeEvent[]>([]);
+  const [elapsed, setElapsed] = useState(0);
+  const timerRef = useRef<number | null>(null);
 
-  const runAnalyze = async (p: Promise<BudgetProposal>) => {
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) window.clearInterval(timerRef.current);
+    };
+  }, []);
+
+  const runStream = async (
+    start: (onEvent: (e: BudgetAnalyzeEvent) => void) => Promise<BudgetProposal>,
+  ) => {
     setBusy(true);
     setError(null);
     setResult(null);
+    setSteps([]);
+    setProposal(null);
+    setRows([]);
+    const t0 = Date.now();
+    setElapsed(0);
+    if (timerRef.current) window.clearInterval(timerRef.current);
+    timerRef.current = window.setInterval(() => setElapsed((Date.now() - t0) / 1000), 200);
     try {
-      const data = await p;
+      const data = await start((e) => setSteps((prev) => [...prev, e]));
       setProposal(data);
       setRows(data.items);
     } catch (e) {
@@ -44,17 +97,21 @@ export default function BudgetSetupPage() {
       setProposal(null);
       setRows([]);
     } finally {
+      if (timerRef.current) {
+        window.clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
       setBusy(false);
     }
   };
 
   const onFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) runAnalyze(analyzeBudgetFile(file));
+    if (file) runStream((onEvent) => analyzeBudgetFileStream(file, onEvent));
   };
 
   const onPaste = () => {
-    if (pasteText.trim()) runAnalyze(analyzeBudgetPaste(pasteText));
+    if (pasteText.trim()) runStream((onEvent) => analyzeBudgetPasteStream(pasteText, onEvent));
   };
 
   const updateRow = (i: number, patch: Partial<BudgetProposalItem>) => {
@@ -161,7 +218,39 @@ export default function BudgetSetupPage() {
               </button>
             </div>
           )}
-          {busy && <p className="text-sm text-gray-400">Analyzing with the local model…</p>}
+          {(busy || steps.length > 0) && (
+            <div className="rounded-lg border border-gray-700 bg-gray-900/50 p-3 text-sm">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-gray-300 font-medium flex items-center gap-2">
+                  {busy && <Loader2 size={15} className="animate-spin text-emerald-400" />}
+                  {busy ? "Analyzing…" : "Analysis steps"}
+                </span>
+                <span className="text-gray-500 tabular-nums">{elapsed.toFixed(1)}s</span>
+              </div>
+              <ol className="space-y-1">
+                {steps.map((s, i) => {
+                  const isLast = i === steps.length - 1;
+                  const pending = busy && isLast && s.stage !== "complete";
+                  return (
+                    <li key={i} className="flex items-start gap-2 text-gray-400">
+                      {pending ? (
+                        <Loader2 size={13} className="animate-spin text-emerald-400 mt-0.5 shrink-0" />
+                      ) : (
+                        <Check size={13} className="text-emerald-500 mt-0.5 shrink-0" />
+                      )}
+                      <span className={pending ? "text-gray-200" : ""}>{stepText(s)}</span>
+                    </li>
+                  );
+                })}
+              </ol>
+              {busy && (
+                <p className="text-xs text-gray-500 mt-2">
+                  Local models run on your machine — the first request also loads the model into
+                  memory, so it can take 10–60s. The app stays responsive while this runs.
+                </p>
+              )}
+            </div>
+          )}
         </div>
       )}
 

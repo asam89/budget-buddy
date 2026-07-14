@@ -8,6 +8,7 @@ import pandas as pd
 
 from app.models import Budget, Category
 from app.services.budget_setup import (
+    analyze_stream,
     commit_budget,
     normalize_to_monthly,
     parse_budget_dataframe,
@@ -124,6 +125,62 @@ def test_propose_budget_normalizes_when_llm_omits_amount(db_session):
     ])
     result = propose_budget(db_session, items, provider=provider)
     assert result["items"][0]["monthly_amount"] == 100.0
+
+
+# ---- streaming progress ----
+
+def test_analyze_stream_emits_stages_and_final_payload(db_session):
+    db_session.add(Category(name="Housing"))
+    db_session.commit()
+    items = [{"label": "Rent", "amount": 2200.0, "period_hint": None}]
+    provider = FakeProvider([
+        {"label": "Rent", "category": "Housing", "monthly_amount": 2200.0,
+         "period": "monthly", "kind": "expense", "confidence": 0.95, "note": ""}
+    ])
+    events = list(analyze_stream(db_session, items, provider=provider))
+    stages = [e["stage"] for e in events]
+    # ordered pipeline, ending in the completed payload
+    assert stages[0] == "parsed"
+    assert "checking_model" in stages
+    assert "calling_model" in stages
+    assert "model_done" in stages
+    assert stages[-1] == "complete"
+    # calling_model precedes model_done (the slow step is bracketed)
+    assert stages.index("calling_model") < stages.index("model_done")
+    final = events[-1]["detail"]
+    assert final["ai_used"] is True
+    assert final["items"][0]["category"] == "Housing"
+
+
+def test_analyze_stream_reports_heuristic_when_offline(db_session):
+    items = [{"label": "Rent", "amount": 2200.0, "period_hint": None}]
+    provider = FakeProvider([], reachable=False)
+    events = list(analyze_stream(db_session, items, provider=provider))
+    stages = [e["stage"] for e in events]
+    assert "heuristic" in stages
+    assert "calling_model" not in stages
+    assert events[-1]["detail"]["ai_used"] is False
+
+
+def test_analyze_stream_endpoint_streams_sse(client):
+    tsv = "Expense\tAmount\nRent\t2200\n"
+    fake = FakeProvider([
+        {"label": "Rent", "category": "Housing", "monthly_amount": 2200.0,
+         "period": "monthly", "kind": "expense", "confidence": 0.9, "note": ""},
+    ])
+    with patch("app.services.budget_setup._get_llm_provider", return_value=fake):
+        resp = client.post("/api/budget-setup/analyze-paste-stream", data={"text": tsv})
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("text/event-stream")
+    events = [
+        json.loads(line[len("data: "):])
+        for line in resp.text.splitlines()
+        if line.startswith("data: ")
+    ]
+    stages = [e["stage"] for e in events]
+    assert stages[0] == "parsed"
+    assert stages[-1] == "complete"
+    assert events[-1]["detail"]["items"][0]["category"] == "Housing"
 
 
 # ---- commit ----

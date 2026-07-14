@@ -131,6 +131,75 @@ export const commitBudgetSetup = (items: BudgetCommitItem[]) =>
     body: JSON.stringify({ items }),
   });
 
+export interface BudgetAnalyzeEvent {
+  stage: string;
+  detail: Record<string, unknown>;
+}
+
+// Consume a Server-Sent-Events analyze stream, invoking onEvent per step and
+// resolving with the final proposal (the "complete" event's payload).
+async function streamAnalyze(
+  path: string,
+  body: FormData,
+  onEvent: (e: BudgetAnalyzeEvent) => void,
+): Promise<BudgetProposal> {
+  const res = await fetch(`${BASE}${path}`, {
+    method: "POST",
+    body,
+    credentials: "same-origin",
+  });
+  if (res.status === 401) throw new Error("Not authenticated");
+  if (!res.ok || !res.body) {
+    const b = await res.json().catch(() => ({}));
+    throw new Error(b.detail || `HTTP ${res.status}`);
+  }
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = "";
+  let proposal: BudgetProposal | null = null;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    let idx: number;
+    while ((idx = buf.indexOf("\n\n")) !== -1) {
+      const line = buf
+        .slice(0, idx)
+        .split("\n")
+        .find((l) => l.startsWith("data:"));
+      buf = buf.slice(idx + 2);
+      if (!line) continue;
+      const evt = JSON.parse(line.slice(5).trim()) as BudgetAnalyzeEvent;
+      if (evt.stage === "complete") {
+        proposal = evt.detail as unknown as BudgetProposal;
+      } else if (evt.stage === "error") {
+        throw new Error((evt.detail.error as string) || "Analysis failed");
+      }
+      onEvent(evt);
+    }
+  }
+  if (!proposal) throw new Error("Analysis did not complete");
+  return proposal;
+}
+
+export const analyzeBudgetFileStream = (
+  file: File,
+  onEvent: (e: BudgetAnalyzeEvent) => void,
+) => {
+  const form = new FormData();
+  form.append("file", file);
+  return streamAnalyze("/budget-setup/analyze-stream", form, onEvent);
+};
+
+export const analyzeBudgetPasteStream = (
+  text: string,
+  onEvent: (e: BudgetAnalyzeEvent) => void,
+) => {
+  const form = new FormData();
+  form.append("text", text);
+  return streamAnalyze("/budget-setup/analyze-paste-stream", form, onEvent);
+};
+
 // Types
 export interface LlmHealth {
   provider_name: string;

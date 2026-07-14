@@ -8,7 +8,8 @@ review gate before any Budget rows are written.
 
 import logging
 import re
-from typing import Optional
+import time
+from typing import Iterator, Optional
 
 import pandas as pd
 from sqlalchemy.orm import Session
@@ -225,6 +226,17 @@ def propose_budget(
     if proposals is None:
         proposals = _propose_heuristic(items, existing)
 
+    return _align_and_build(items, proposals, ai_used, assisting_model, existing)
+
+
+def _align_and_build(
+    items: list[dict],
+    proposals: list[dict],
+    ai_used: bool,
+    assisting_model: Optional[str],
+    existing: list[str],
+) -> dict:
+    """Merge raw items with (possibly ragged) LLM proposals into the response."""
     # Align to input length defensively (LLM may drop/add rows).
     aligned = []
     for i, raw in enumerate(items):
@@ -250,6 +262,77 @@ def propose_budget(
         "existing_categories": existing,
         "items": aligned,
     }
+
+
+def analyze_stream(
+    db: Session,
+    items: list[dict],
+    provider: Optional[LLMProvider] = None,
+) -> Iterator[dict]:
+    """Same work as ``propose_budget`` but yields progress events as it goes.
+
+    Each yielded dict is ``{"stage": str, "detail": {...}}``. The terminal
+    event has ``stage == "complete"`` and its ``detail`` is the full proposal
+    payload (identical shape to ``propose_budget``).
+    """
+    existing = [c.name for c in db.query(Category).order_by(Category.name).all()]
+    yield {"stage": "parsed", "detail": {"rows": len(items)}}
+
+    if provider is None:
+        provider = _get_llm_provider(db)
+
+    ai_used = False
+    assisting_model = None
+    proposals: Optional[list[dict]] = None
+
+    if provider is not None:
+        assisting_model = provider.name()
+        yield {"stage": "checking_model", "detail": {"model": assisting_model}}
+        health = provider.health()
+        yield {
+            "stage": "model_status",
+            "detail": {
+                "model": assisting_model,
+                "reachable": health.reachable,
+                "model_available": health.model_available,
+                "latency_ms": health.latency_ms,
+                "error": health.error,
+            },
+        }
+        if health.reachable and health.model_available:
+            yield {
+                "stage": "calling_model",
+                "detail": {"model": assisting_model, "rows": len(items)},
+            }
+            t0 = time.time()
+            try:
+                proposals = _propose_with_llm(provider, items, existing)
+                ai_used = True
+                yield {
+                    "stage": "model_done",
+                    "detail": {
+                        "elapsed_ms": round((time.time() - t0) * 1000, 1),
+                        "items_returned": len(proposals),
+                    },
+                }
+            except Exception as e:
+                logger.exception("LLM budget proposal failed; using heuristic")
+                proposals = None
+                yield {
+                    "stage": "model_error",
+                    "detail": {
+                        "error": str(e),
+                        "elapsed_ms": round((time.time() - t0) * 1000, 1),
+                    },
+                }
+
+    if proposals is None:
+        yield {"stage": "heuristic", "detail": {}}
+        proposals = _propose_heuristic(items, existing)
+
+    yield {"stage": "normalizing", "detail": {"rows": len(items)}}
+    payload = _align_and_build(items, proposals, ai_used, assisting_model, existing)
+    yield {"stage": "complete", "detail": payload}
 
 
 def _propose_with_llm(
