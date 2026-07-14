@@ -67,6 +67,28 @@ def _parse_pasted(text: str) -> pd.DataFrame:
 _NO_ITEMS = "Could not find any budget line items (need a label column and an amount column)."
 
 
+def _extract_items(df_raw: pd.DataFrame) -> list[dict]:
+    """Parse a raw sheet into budget line items, mapping failures to 422.
+
+    parse_budget_dataframe can raise on awkward layouts (e.g. wide grids with
+    repeated headers); surface those as a readable client error rather than a
+    500.
+    """
+    try:
+        items = parse_budget_dataframe(df_raw)
+    except Exception as e:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "Couldn't read this as a budget summary. Expected a simple "
+                f"label + amount layout (one row per line item). ({e})"
+            ),
+        )
+    if not items:
+        raise HTTPException(status_code=422, detail=_NO_ITEMS)
+    return items
+
+
 @router.post("/analyze", response_model=BudgetProposalResponse)
 async def analyze_budget(
     file: UploadFile = File(...),
@@ -76,9 +98,7 @@ async def analyze_budget(
     """Parse an uploaded budget sheet and propose categories + monthly amounts."""
     content = await file.read()
     df_raw = _read_dataframe(content, file.filename or "upload")
-    items = parse_budget_dataframe(df_raw)
-    if not items:
-        raise HTTPException(status_code=422, detail=_NO_ITEMS)
+    items = _extract_items(df_raw)
     # The LLM call is blocking network I/O; keep it off the event loop.
     return await run_in_threadpool(propose_budget, db, items)
 
@@ -91,9 +111,7 @@ async def analyze_budget_paste(
 ):
     """Parse pasted TSV budget data (from Google Sheets / Excel) and propose."""
     df_raw = _parse_pasted(text)
-    items = parse_budget_dataframe(df_raw)
-    if not items:
-        raise HTTPException(status_code=422, detail=_NO_ITEMS)
+    items = _extract_items(df_raw)
     return await run_in_threadpool(propose_budget, db, items)
 
 
@@ -118,9 +136,7 @@ async def analyze_budget_stream(
     """Streaming variant of /analyze that emits step-by-step progress events."""
     content = await file.read()
     df_raw = _read_dataframe(content, file.filename or "upload")
-    items = parse_budget_dataframe(df_raw)
-    if not items:
-        raise HTTPException(status_code=422, detail=_NO_ITEMS)
+    items = _extract_items(df_raw)
     return StreamingResponse(
         _sse(analyze_stream(db, items)),
         media_type="text/event-stream",
@@ -136,9 +152,7 @@ async def analyze_budget_paste_stream(
 ):
     """Streaming variant of /analyze-paste that emits step-by-step progress."""
     df_raw = _parse_pasted(text)
-    items = parse_budget_dataframe(df_raw)
-    if not items:
-        raise HTTPException(status_code=422, detail=_NO_ITEMS)
+    items = _extract_items(df_raw)
     return StreamingResponse(
         _sse(analyze_stream(db, items)),
         media_type="text/event-stream",
