@@ -1,16 +1,20 @@
 """Budget Setup router — AI-assisted onboarding from a summary budget sheet."""
 
 import io
+import json
 
 import pandas as pd
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
-from typing import Optional
+from starlette.concurrency import run_in_threadpool
+from typing import Iterator, Optional
 
 from app.database import get_db
 from app.models import User
 from app.services.budget_setup import (
+    analyze_stream,
     commit_budget,
     parse_budget_dataframe,
     propose_budget,
@@ -51,6 +55,18 @@ def _read_dataframe(content: bytes, filename: str) -> pd.DataFrame:
     raise HTTPException(status_code=400, detail=f"Unsupported file type: .{ext}")
 
 
+def _parse_pasted(text: str) -> pd.DataFrame:
+    if not text.strip():
+        raise HTTPException(status_code=400, detail="No data pasted")
+    try:
+        return pd.read_csv(io.StringIO(text), header=None, sep="\t")
+    except Exception as e:
+        raise HTTPException(status_code=422, detail=f"Could not parse pasted data: {e}")
+
+
+_NO_ITEMS = "Could not find any budget line items (need a label column and an amount column)."
+
+
 @router.post("/analyze", response_model=BudgetProposalResponse)
 async def analyze_budget(
     file: UploadFile = File(...),
@@ -62,11 +78,9 @@ async def analyze_budget(
     df_raw = _read_dataframe(content, file.filename or "upload")
     items = parse_budget_dataframe(df_raw)
     if not items:
-        raise HTTPException(
-            status_code=422,
-            detail="Could not find any budget line items (need a label column and an amount column).",
-        )
-    return propose_budget(db, items)
+        raise HTTPException(status_code=422, detail=_NO_ITEMS)
+    # The LLM call is blocking network I/O; keep it off the event loop.
+    return await run_in_threadpool(propose_budget, db, items)
 
 
 @router.post("/analyze-paste", response_model=BudgetProposalResponse)
@@ -76,19 +90,60 @@ async def analyze_budget_paste(
     _user: User = Depends(get_current_user),
 ):
     """Parse pasted TSV budget data (from Google Sheets / Excel) and propose."""
-    if not text.strip():
-        raise HTTPException(status_code=400, detail="No data pasted")
-    try:
-        df_raw = pd.read_csv(io.StringIO(text), header=None, sep="\t")
-    except Exception as e:
-        raise HTTPException(status_code=422, detail=f"Could not parse pasted data: {e}")
+    df_raw = _parse_pasted(text)
     items = parse_budget_dataframe(df_raw)
     if not items:
-        raise HTTPException(
-            status_code=422,
-            detail="Could not find any budget line items (need a label column and an amount column).",
-        )
-    return propose_budget(db, items)
+        raise HTTPException(status_code=422, detail=_NO_ITEMS)
+    return await run_in_threadpool(propose_budget, db, items)
+
+
+def _sse(events: Iterator[dict]) -> Iterator[str]:
+    """Serialize progress events as Server-Sent Events."""
+    try:
+        for event in events:
+            yield f"data: {json.dumps(event)}\n\n"
+    except Exception as e:  # surface unexpected failures to the client
+        yield f"data: {json.dumps({'stage': 'error', 'detail': {'error': str(e)}})}\n\n"
+
+
+_SSE_HEADERS = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
+
+
+@router.post("/analyze-stream")
+async def analyze_budget_stream(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    _user: User = Depends(get_current_user),
+):
+    """Streaming variant of /analyze that emits step-by-step progress events."""
+    content = await file.read()
+    df_raw = _read_dataframe(content, file.filename or "upload")
+    items = parse_budget_dataframe(df_raw)
+    if not items:
+        raise HTTPException(status_code=422, detail=_NO_ITEMS)
+    return StreamingResponse(
+        _sse(analyze_stream(db, items)),
+        media_type="text/event-stream",
+        headers=_SSE_HEADERS,
+    )
+
+
+@router.post("/analyze-paste-stream")
+async def analyze_budget_paste_stream(
+    text: str = Form(...),
+    db: Session = Depends(get_db),
+    _user: User = Depends(get_current_user),
+):
+    """Streaming variant of /analyze-paste that emits step-by-step progress."""
+    df_raw = _parse_pasted(text)
+    items = parse_budget_dataframe(df_raw)
+    if not items:
+        raise HTTPException(status_code=422, detail=_NO_ITEMS)
+    return StreamingResponse(
+        _sse(analyze_stream(db, items)),
+        media_type="text/event-stream",
+        headers=_SSE_HEADERS,
+    )
 
 
 class BudgetCommitItem(BaseModel):
