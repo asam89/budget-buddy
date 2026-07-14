@@ -148,7 +148,21 @@ To stop: `launchctl unload ~/Library/LaunchAgents/com.budgetbuddy.plist`
 
 ## Updating to a New Version
 
-When a new version is released on `main`:
+> **Note**: Merging a PR on GitHub does **not** update the host machine. The
+> host only gets new code when you pull it. Run the deploy step below after
+> each merge you want to go live.
+
+### Quick way (Mac / Linux): `deploy.sh`
+
+The repo ships a `deploy.sh` that pulls `main`, updates dependencies, rebuilds
+the frontend, and restarts the server (via launchd if it's managing the
+process, otherwise via `nohup`):
+
+```bash
+~/budget-buddy/deploy.sh
+```
+
+### Manual way
 
 ```bash
 cd /path/to/budget-buddy
@@ -165,12 +179,14 @@ cd frontend && npm install && npm run build && cd ..
 
 # Restart the server
 # If using launchd (Mac):
-launchctl unload ~/Library/LaunchAgents/com.budgetbuddy.plist
-launchctl load ~/Library/LaunchAgents/com.budgetbuddy.plist
+launchctl kickstart -k gui/$(id -u)/com.budgetbuddy
 
 # If running manually, just stop (Ctrl+C) and re-run:
 uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
+
+> **Tip**: after updating the frontend, hard-refresh the browser
+> (Cmd+Shift+R / Ctrl+Shift+R) so it doesn't run a cached old bundle.
 
 The database schema updates automatically on startup (SQLAlchemy `create_all`).
 
