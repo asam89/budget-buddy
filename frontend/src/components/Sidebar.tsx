@@ -1,23 +1,31 @@
+import { useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
 import {
   LayoutDashboard, Wallet, ArrowLeftRight, Upload,
-  Target, AlertCircle, BarChart3, LogOut, Sparkles, TrendingUp,
+  Receipt, AlertCircle, BarChart3, LogOut, TrendingUp,
 } from "lucide-react";
-import { logout } from "../api/client";
+import { logout, getPendingReview, getNeedsCategory } from "../api/client";
 
 const links = [
   { to: "/", icon: LayoutDashboard, label: "Dashboard" },
   { to: "/accounts", icon: Wallet, label: "Accounts" },
   { to: "/transactions", icon: ArrowLeftRight, label: "Transactions" },
   { to: "/import", icon: Upload, label: "Import" },
-  { to: "/budgets", icon: Target, label: "Budgets" },
+  { to: "/expenses", icon: Receipt, label: "Expenses" },
   { to: "/income", icon: TrendingUp, label: "Income" },
-  { to: "/budget-setup", icon: Sparkles, label: "Budget Setup" },
   { to: "/review", icon: AlertCircle, label: "Review" },
   { to: "/reports", icon: BarChart3, label: "Reports" },
 ];
 
 export default function Sidebar({ username }: { username: string }) {
+  const [reviewCount, setReviewCount] = useState(0);
+
+  useEffect(() => {
+    Promise.all([getPendingReview(), getNeedsCategory()])
+      .then(([pending, needs]) => setReviewCount(pending.length + needs.length))
+      .catch(() => setReviewCount(0));
+  }, []);
+
   const handleLogout = async () => {
     await logout();
     window.location.href = "/login";
@@ -44,7 +52,12 @@ export default function Sidebar({ username }: { username: string }) {
             }
           >
             <Icon size={18} />
-            {label}
+            <span className="flex-1">{label}</span>
+            {label === "Review" && reviewCount > 0 && (
+              <span className="bg-amber-500/20 text-amber-400 text-xs px-1.5 py-0.5 rounded-full">
+                {reviewCount}
+              </span>
+            )}
           </NavLink>
         ))}
       </nav>
