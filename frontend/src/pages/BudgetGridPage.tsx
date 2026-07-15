@@ -3,12 +3,14 @@ import { ChevronLeft, ChevronRight, Plus, Maximize2 } from "lucide-react";
 import {
   ActualCell,
   ActualLine,
+  MonthTotals,
   YearGrid,
   bulkActuals,
   createCategory,
   deleteActual,
   fillForwardBudget,
   getActualsYear,
+  getMonthTotals,
   upsertActual,
   upsertBudget,
 } from "../api/client";
@@ -47,6 +49,7 @@ export default function BudgetGridPage({ kind, title, budgetLabel, actualLabel }
   const [year, setYear] = useState(now.getFullYear());
   const [monthIdx, setMonthIdx] = useState(now.getMonth());
   const [grid, setGrid] = useState<YearGrid | null>(null);
+  const [totals, setTotals] = useState<MonthTotals | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [openCatId, setOpenCatId] = useState<number | null>(null);
@@ -66,10 +69,23 @@ export default function BudgetGridPage({ kind, title, budgetLabel, actualLabel }
     }
   };
 
+  const refreshTotals = async () => {
+    try {
+      setTotals(await getMonthTotals(ym(year, monthIdx)));
+    } catch {
+      setTotals(null);
+    }
+  };
+
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [year]);
+
+  useEffect(() => {
+    refreshTotals();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [year, monthIdx]);
 
   const lines: ActualLine[] = (grid?.lines ?? []).filter((l) => l.kind === kind);
   const qualifying = lines.filter(
@@ -99,21 +115,25 @@ export default function BudgetGridPage({ kind, title, budgetLabel, actualLabel }
       transaction_sum: cell.transaction_sum,
       manual_amount: cell.manual_amount,
     });
+    if (mIdx === monthIdx) refreshTotals();
   };
 
   const commitBudget = async (catId: number, mIdx: number, amount: number) => {
     await upsertBudget({ category_id: catId, year_month: ym(year, mIdx), monthly_limit: amount });
     patchCell(catId, mIdx, { budget: amount });
+    if (mIdx === monthIdx) refreshTotals();
   };
 
   const clearActual = async (catId: number, mIdx: number) => {
     await deleteActual(catId, ym(year, mIdx));
     await load();
+    refreshTotals();
   };
 
   const fillForward = async (catId: number, mIdx: number, amount: number) => {
     await fillForwardBudget({ category_id: catId, from_year_month: ym(year, mIdx), monthly_limit: amount });
     await load();
+    refreshTotals();
   };
 
   const pasteBudgets = async (catId: number, text: string) => {
@@ -122,12 +142,14 @@ export default function BudgetGridPage({ kind, title, budgetLabel, actualLabel }
       await upsertBudget({ category_id: catId, year_month: ym(year, i), monthly_limit: vals[i] });
     }
     await load();
+    refreshTotals();
   };
 
   const pasteActuals = async (catId: number, text: string) => {
     const vals = parseRow(text).slice(0, 12);
     await bulkActuals(vals.map((v, i) => ({ category_id: catId, year_month: ym(year, i), amount: v })));
     await load();
+    refreshTotals();
   };
 
   const handleAdd = async () => {
@@ -195,7 +217,7 @@ export default function BudgetGridPage({ kind, title, budgetLabel, actualLabel }
         </div>
       )}
 
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-gray-800 rounded-xl p-4 border border-gray-700">
           <p className="text-xs text-gray-400">{budgetLabel} ({MONTHS[monthIdx]})</p>
           <p className="text-xl font-bold">{fmt(budgetTotal)}</p>
@@ -207,6 +229,19 @@ export default function BudgetGridPage({ kind, title, budgetLabel, actualLabel }
         <div className="bg-gray-800 rounded-xl p-4 border border-gray-700">
           <p className="text-xs text-gray-400">{kind === "income" ? "Over/Under Expected" : "Over/Under Budget"}</p>
           <p className={`text-xl font-bold ${diff > 0 ? "text-red-400" : "text-emerald-400"}`}>{fmt(diff)}</p>
+        </div>
+        <div className="bg-gray-800 rounded-xl p-4 border border-gray-700">
+          <p className="text-xs text-gray-400">Total Saved ({MONTHS[monthIdx]})</p>
+          {totals ? (
+            <>
+              <p className={`text-xl font-bold ${totals.saved_actual < 0 ? "text-red-400" : "text-emerald-400"}`}>
+                {fmt(totals.saved_actual)}
+              </p>
+              <p className="text-[11px] text-gray-500">budget {fmt(totals.saved_budget)}</p>
+            </>
+          ) : (
+            <p className="text-xl font-bold text-gray-500">—</p>
+          )}
         </div>
       </div>
 

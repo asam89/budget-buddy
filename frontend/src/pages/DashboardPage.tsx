@@ -91,6 +91,25 @@ export default function DashboardPage() {
         <Card label="Net Cash Flow" value={fmt(data.net_cash_flow)} color={data.net_cash_flow >= 0 ? "text-emerald-400" : "text-red-400"} />
       </div>
 
+      {/* Total Saved (from manual actuals + transactions via the shared aggregation) */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <SavedCard label={`Saved this month (${data.saved.year_month})`} value={data.saved.month_saved_actual} />
+        <Card
+          label="Saved this month (budget)"
+          value={fmt(data.saved.month_saved_budget)}
+          color="text-gray-300"
+        />
+        <SavedCard
+          label={`Saved YTD (Jan–month ${data.saved.ytd_through_month})`}
+          value={data.saved.ytd_saved_actual}
+        />
+        <Card
+          label="Saved full year (budget)"
+          value={fmt(data.saved.year_saved_budget)}
+          color="text-gray-300"
+        />
+      </div>
+
       <div className="grid lg:grid-cols-2 gap-6">
         {/* Monthly Trend */}
         <div className="bg-gray-800 rounded-xl p-4 border border-gray-700">
@@ -189,6 +208,20 @@ function Card({ label, value, color }: { label: string; value: string; color: st
     <div className="bg-gray-800 rounded-xl p-4 border border-gray-700">
       <p className="text-xs text-gray-400 uppercase tracking-wide">{label}</p>
       <p className={`text-xl font-bold mt-1 ${color}`}>{value}</p>
+    </div>
+  );
+}
+
+// Actual saved: negative shows as overspent (not clamped to zero).
+function SavedCard({ label, value }: { label: string; value: number }) {
+  const negative = value < 0;
+  return (
+    <div className="bg-gray-800 rounded-xl p-4 border border-gray-700">
+      <p className="text-xs text-gray-400 uppercase tracking-wide">{label}</p>
+      <p className={`text-xl font-bold mt-1 ${negative ? "text-red-400" : "text-emerald-400"}`}>
+        {fmt(value)}
+      </p>
+      {negative && <p className="text-[11px] text-red-400/80 mt-0.5">overspent</p>}
     </div>
   );
 }

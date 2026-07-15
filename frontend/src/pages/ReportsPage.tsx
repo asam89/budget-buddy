@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   getEntities,
+  getYearSummary,
   Entity,
+  YearSummary,
 } from "../api/client";
 import { BarChart3, TrendingUp, GitCompare } from "lucide-react";
 
@@ -80,10 +82,14 @@ export default function ReportsPage() {
   const [pnlData, setPnlData] = useState<PnlData | null>(null);
   // Comparison data
   const [compData, setCompData] = useState<ComparisonData | null>(null);
+  // Annual saved (shared aggregation)
+  const reportYear = new Date().getFullYear();
+  const [yearSaved, setYearSaved] = useState<YearSummary | null>(null);
 
   useEffect(() => {
     getEntities().then(setEntities);
-  }, []);
+    getYearSummary(reportYear).then(setYearSaved).catch(() => setYearSaved(null));
+  }, [reportYear]);
 
   const loadPivot = useCallback(() => {
     const params = new URLSearchParams({ months: String(months), mode });
@@ -121,6 +127,33 @@ export default function ReportsPage() {
   return (
     <div className="space-y-6">
       <h2 className="text-2xl font-bold">Reports</h2>
+
+      {/* Annual saved (income - expenses via shared aggregation) */}
+      {yearSaved && (
+        <div className="bg-gray-800 rounded-xl p-4 border border-gray-700">
+          <h3 className="font-semibold mb-3">{reportYear} Saved</h3>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div>
+              <p className="text-xs text-gray-400">Budgeted saved (full year)</p>
+              <p className="text-xl font-bold text-gray-200">{fmt(yearSaved.saved_budget_year)}</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-400">Actual saved (YTD, Jan–month {yearSaved.ytd_through_month})</p>
+              <p className={`text-xl font-bold ${yearSaved.saved_actual_ytd < 0 ? "text-red-400" : "text-emerald-400"}`}>
+                {fmt(yearSaved.saved_actual_ytd)}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-400">Income YTD</p>
+              <p className="text-xl font-bold text-blue-400">{fmt(yearSaved.income_actual_ytd)}</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-400">Expenses YTD</p>
+              <p className="text-xl font-bold text-red-400">{fmt(yearSaved.expense_actual_ytd)}</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Tab bar */}
       <div className="flex gap-1 bg-gray-800 rounded-lg p-1 w-fit">
