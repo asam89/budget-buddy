@@ -39,15 +39,30 @@ function parseRow(text: string): number[] {
 
 interface Props {
   kind: "expense" | "income";
-  title: string;
+  title?: string;
   budgetLabel: string;
   actualLabel: string;
 }
 
+function readStored(key: string, fallback: number): number {
+  const raw = sessionStorage.getItem(key);
+  const n = raw === null ? NaN : parseInt(raw, 10);
+  return Number.isFinite(n) ? n : fallback;
+}
+
 export default function BudgetGridPage({ kind, title, budgetLabel, actualLabel }: Props) {
   const now = new Date();
-  const [year, setYear] = useState(now.getFullYear());
-  const [monthIdx, setMonthIdx] = useState(now.getMonth());
+  const yearKey = `grid.${kind}.year`;
+  const monthKey = `grid.${kind}.month`;
+  const [year, setYear] = useState(() => readStored(yearKey, now.getFullYear()));
+  const [monthIdx, setMonthIdx] = useState(() => readStored(monthKey, now.getMonth()));
+
+  useEffect(() => {
+    sessionStorage.setItem(yearKey, String(year));
+  }, [year, yearKey]);
+  useEffect(() => {
+    sessionStorage.setItem(monthKey, String(monthIdx));
+  }, [monthIdx, monthKey]);
   const [grid, setGrid] = useState<YearGrid | null>(null);
   const [totals, setTotals] = useState<MonthTotals | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -172,7 +187,7 @@ export default function BudgetGridPage({ kind, title, budgetLabel, actualLabel }
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <h2 className="text-2xl font-bold">{title}</h2>
+        {title ? <h2 className="text-2xl font-bold">{title}</h2> : <span />}
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1 bg-gray-800 rounded-lg border border-gray-700">
             <button onClick={() => setYear((y) => y - 1)} className="p-2 hover:text-emerald-400" aria-label="Previous year">
