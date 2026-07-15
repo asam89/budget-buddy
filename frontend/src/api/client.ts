@@ -324,6 +324,51 @@ export const completeOtherMigration = () =>
     method: "POST",
   });
 
+// Insights (WS-D)
+export interface InsightsFindings {
+  period: string;
+  period_label: string;
+  previous_period_label: string;
+  totals: {
+    expense_actual: number;
+    expense_budget: number;
+    income_actual: number;
+    saved_actual: number;
+    savings_rate_pct: number;
+  };
+  top_categories: { name: string; actual: number; budget: number; variance: number; share_pct: number }[];
+  over_budget: { name: string; actual: number; budget: number; overage: number }[];
+  biggest_changes: { name: string; previous: number; current: number; delta: number }[];
+}
+
+export interface InsightsNarrative {
+  summary: string;
+  bullets: string[];
+  dropped: number;
+}
+
+export interface InsightsResult {
+  findings: InsightsFindings;
+  generated: boolean;
+  narrative: InsightsNarrative | null;
+  model: string | null;
+  generated_at: string | null;
+  error: string | null;
+  cached: boolean;
+  prompt_version: string;
+}
+
+export const getInsightsFindings = (yearMonth: string) =>
+  request<{ findings: InsightsFindings; has_cached_narrative: boolean }>(
+    `/insights/findings?year_month=${yearMonth}`,
+  );
+
+export const generateInsights = (yearMonth: string, force = false) =>
+  request<InsightsResult>(
+    `/insights/generate?year_month=${yearMonth}&force=${force}`,
+    { method: "POST" },
+  );
+
 export interface BudgetCommitResult {
   categories_created: number;
   budgets_created: number;

@@ -5,6 +5,7 @@ import BudgetGridPage from "./BudgetGridPage";
 import BudgetSetupPage from "./BudgetSetupPage";
 import MonthlyTrendView from "../components/expenses/MonthlyTrendView";
 import YearlyTrendView from "../components/expenses/YearlyTrendView";
+import ExpensesInsightsCard from "../components/expenses/ExpensesInsightsCard";
 
 type View = "tiles" | "monthly" | "yearly";
 
@@ -22,14 +23,6 @@ function readStored(key: string, fallback: number): number {
   const raw = sessionStorage.getItem(key);
   const n = raw === null ? NaN : parseInt(raw, 10);
   return Number.isFinite(n) ? n : fallback;
-}
-
-function Placeholder({ title }: { title: string }) {
-  return (
-    <div className="bg-gray-800 rounded-xl p-8 border border-gray-700 text-center text-gray-500">
-      {title} arrives in the next update.
-    </div>
-  );
 }
 
 export default function ExpensesPage() {
@@ -113,7 +106,7 @@ export default function ExpensesPage() {
       )}
       {view === "yearly" && <YearlyTrendView year={year} setYear={setYear} />}
 
-      <Placeholder title="The AI insights summary" />
+      <ExpensesInsightsCard year={year} monthIdx={monthIdx} />
     </div>
   );
 }

@@ -9,7 +9,7 @@ from app.database import SessionLocal, engine, ensure_schema
 from app.routers import (
     auth, accounts, transactions, plaid, dashboard,
     categories, budgets, bills, imports, entities, reports, export, settings,
-    budget_setup, actuals, migration,
+    budget_setup, actuals, migration, insights,
 )
 from app.services.other_migration import silent_delete_if_empty
 
@@ -45,6 +45,7 @@ app.include_router(settings.router)
 app.include_router(budget_setup.router)
 app.include_router(actuals.router)
 app.include_router(migration.router)
+app.include_router(insights.router)
 
 # Serve the React frontend
 frontend_dist = Path(__file__).parent.parent / "frontend" / "dist"
