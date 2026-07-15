@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { useState, useEffect } from "react";
 import Sidebar from "./components/Sidebar";
+import OtherReassignmentModal from "./components/OtherReassignmentModal";
 import DashboardPage from "./pages/DashboardPage";
 import AccountsPage from "./pages/AccountsPage";
 import TransactionsPage from "./pages/TransactionsPage";
@@ -45,6 +46,7 @@ function App() {
   return (
     <BrowserRouter>
       <div className="flex min-h-screen bg-gray-900 text-gray-100">
+        <OtherReassignmentModal />
         <Sidebar username={user.username} />
         <main className="flex-1 p-6 overflow-auto">
           <Routes>

@@ -98,6 +98,25 @@ def list_pending_review(
     )
 
 
+@router.get("/needs-category", response_model=list[TransactionOut])
+def list_needs_category(
+    db: Session = Depends(get_db),
+    _user: User = Depends(get_current_user),
+):
+    """Confirmed transactions with no category — the single home for anything
+    uncategorized. There is no catch-all category; these wait here for the
+    user to assign a real one."""
+    return (
+        db.query(Transaction)
+        .filter(
+            Transaction.review_status == "confirmed",
+            Transaction.category_id.is_(None),
+        )
+        .order_by(Transaction.date.desc())
+        .all()
+    )
+
+
 @router.post("/", response_model=TransactionOut, status_code=201)
 def create_transaction(
     data: TransactionCreate,

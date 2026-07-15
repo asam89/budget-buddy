@@ -5,17 +5,20 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
-from app.database import engine, ensure_schema
+from app.database import SessionLocal, engine, ensure_schema
 from app.routers import (
     auth, accounts, transactions, plaid, dashboard,
     categories, budgets, bills, imports, entities, reports, export, settings,
-    budget_setup, actuals,
+    budget_setup, actuals, migration,
 )
+from app.services.other_migration import silent_delete_if_empty
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     ensure_schema(engine)
+    with SessionLocal() as db:
+        silent_delete_if_empty(db)
     yield
 
 
@@ -41,6 +44,7 @@ app.include_router(export.router)
 app.include_router(settings.router)
 app.include_router(budget_setup.router)
 app.include_router(actuals.router)
+app.include_router(migration.router)
 
 # Serve the React frontend
 frontend_dist = Path(__file__).parent.parent / "frontend" / "dist"

@@ -44,6 +44,7 @@ export const getTransactionTotals = (params?: Record<string, string>) => {
   return request<TransactionTotals>(`/transactions/totals${qs}`);
 };
 export const getPendingReview = () => request<Transaction[]>("/transactions/pending-review");
+export const getNeedsCategory = () => request<Transaction[]>("/transactions/needs-category");
 export const reviewTransaction = (id: number, data: ReviewData) =>
   request<Transaction>(`/transactions/${id}/review`, { method: "PUT", body: JSON.stringify(data) });
 export const createTransaction = (data: TransactionCreate) =>
@@ -272,7 +273,8 @@ export interface BudgetProposalItem {
   source_amount: number;
   period: string;
   monthly_amount: number;
-  category: string;
+  category: string | null;
+  needs_category: boolean;
   kind: string;
   confidence: number;
   note: string;
@@ -286,10 +288,41 @@ export interface BudgetProposal {
 }
 
 export interface BudgetCommitItem {
-  category: string;
+  category: string | null;
+  label?: string;
   monthly_amount: number;
   kind: string;
 }
+
+// Legacy 'Other' category migration
+export interface OtherGroup {
+  key: string;
+  kind: string;
+  label: string;
+  count: number;
+  amount: number;
+}
+export interface OtherSummary {
+  exists: boolean;
+  category_id: number | null;
+  groups: OtherGroup[];
+  totals: Record<string, number>;
+}
+export interface OtherAssignment {
+  group_key: string;
+  to_category_id?: number;
+  new_category_name?: string;
+}
+export const getOtherSummary = () => request<OtherSummary>("/migration/other");
+export const reassignOther = (assignments: OtherAssignment[]) =>
+  request<{ moved: number; other_deleted: boolean; remaining_references: number }>(
+    "/migration/other/reassign",
+    { method: "POST", body: JSON.stringify({ assignments }) },
+  );
+export const completeOtherMigration = () =>
+  request<{ other_deleted: boolean; already_absent: boolean }>("/migration/other/complete", {
+    method: "POST",
+  });
 
 export interface BudgetCommitResult {
   categories_created: number;
