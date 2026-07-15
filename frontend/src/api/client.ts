@@ -64,6 +64,11 @@ export const getCategories = () => request<Category[]>("/categories/");
 export const seedCategories = () => request<Category[]>("/categories/seed-defaults", { method: "POST" });
 export const createCategory = (data: { name: string; kind: string }) =>
   request<Category>("/categories/", { method: "POST", body: JSON.stringify(data) });
+export const deleteCategory = (id: number) =>
+  request<{ deleted: boolean; budgets_deleted: number; manual_actuals_deleted: number }>(
+    `/categories/${id}`,
+    { method: "DELETE" },
+  );
 
 // Entities
 export const getEntities = () => request<Entity[]>("/entities/");
