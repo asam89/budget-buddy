@@ -329,6 +329,7 @@ export interface Category {
   id: number;
   name: string;
   parent_id: number | null;
+  kind: string;
   icon: string | null;
   color: string | null;
   is_system: boolean;
