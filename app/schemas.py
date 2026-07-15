@@ -269,6 +269,18 @@ class BudgetCreate(BaseModel):
     year_month: Optional[str] = None
 
 
+class BudgetUpsert(BaseModel):
+    category_id: int
+    year_month: str
+    monthly_limit: float = Field(ge=0)
+
+
+class BudgetFillForward(BaseModel):
+    category_id: int
+    from_year_month: str
+    monthly_limit: float = Field(ge=0)
+
+
 # --- Manual actuals ---
 class ManualActualUpsert(BaseModel):
     category_id: int

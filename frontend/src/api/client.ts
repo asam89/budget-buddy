@@ -61,6 +61,8 @@ export const deleteTransaction = (id: number) =>
 // Categories
 export const getCategories = () => request<Category[]>("/categories/");
 export const seedCategories = () => request<Category[]>("/categories/seed-defaults", { method: "POST" });
+export const createCategory = (data: { name: string; kind: string }) =>
+  request<Category>("/categories/", { method: "POST", body: JSON.stringify(data) });
 
 // Entities
 export const getEntities = () => request<Entity[]>("/entities/");
@@ -78,6 +80,62 @@ export const deleteSavedView = (id: number) =>
 export const getBudgets = () => request<Budget[]>("/budgets/");
 export const createBudget = (data: { category_id: number; monthly_limit: number }) =>
   request<Budget>("/budgets/", { method: "POST", body: JSON.stringify(data) });
+export const upsertBudget = (data: { category_id: number; year_month: string; monthly_limit: number }) =>
+  request<Budget>("/budgets/upsert", { method: "POST", body: JSON.stringify(data) });
+export const fillForwardBudget = (data: { category_id: number; from_year_month: string; monthly_limit: number }) =>
+  request<{ updated: number }>("/budgets/fill-forward", { method: "POST", body: JSON.stringify(data) });
+
+// Manual actuals / year grid
+export type CellSource = "manual" | "transactions" | "none";
+export interface ActualCell {
+  year_month: string;
+  effective: number | null;
+  source: CellSource;
+  transaction_sum: number;
+  manual_amount: number | null;
+  budget: number | null;
+}
+export interface ActualLine {
+  category_id: number;
+  category_name: string;
+  kind: string;
+  cells: ActualCell[];
+}
+export interface YearGrid {
+  year: number;
+  lines: ActualLine[];
+}
+export interface MonthTotals {
+  year_month: string;
+  income_actual: number;
+  expense_actual: number;
+  income_budget: number;
+  expense_budget: number;
+  saved_actual: number;
+  saved_budget: number;
+}
+export interface YearSummary {
+  year: number;
+  months: MonthTotals[];
+  saved_budget_year: number;
+  income_budget_year: number;
+  expense_budget_year: number;
+  saved_actual_ytd: number;
+  income_actual_ytd: number;
+  expense_actual_ytd: number;
+  ytd_through_month: number;
+}
+
+export const getActualsYear = (year: number) => request<YearGrid>(`/actuals/?year=${year}`);
+export const upsertActual = (data: { category_id: number; year_month: string; amount: number; note?: string }) =>
+  request<ActualCell>("/actuals/", { method: "POST", body: JSON.stringify(data) });
+export const bulkActuals = (entries: { category_id: number; year_month: string; amount: number }[]) =>
+  request<{ upserted: number }>("/actuals/bulk", { method: "POST", body: JSON.stringify({ entries }) });
+export const deleteActual = (categoryId: number, yearMonth: string) =>
+  request<{}>(`/actuals/${categoryId}/${yearMonth}`, { method: "DELETE" });
+export const getMonthTotals = (yearMonth: string) =>
+  request<MonthTotals>(`/actuals/month-totals?year_month=${yearMonth}`);
+export const getYearSummary = (year: number) => request<YearSummary>(`/actuals/year-summary?year=${year}`);
 
 // Bills
 export const getBills = () => request<Bill[]>("/bills/");
