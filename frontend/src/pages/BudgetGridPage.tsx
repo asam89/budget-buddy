@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ChevronLeft, ChevronRight, Plus, Maximize2, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Maximize2, Trash2, Pencil, Check, X } from "lucide-react";
 import {
   ActualCell,
   ActualLine,
@@ -12,6 +12,7 @@ import {
   fillForwardBudget,
   getActualsYear,
   getMonthTotals,
+  updateCategory,
   upsertActual,
   upsertBudget,
 } from "../api/client";
@@ -72,6 +73,8 @@ export default function BudgetGridPage({ kind, title, budgetLabel, actualLabel }
   const [addOpen, setAddOpen] = useState(false);
   const [newName, setNewName] = useState("");
   const [deleting, setDeleting] = useState<number | null>(null);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editName, setEditName] = useState("");
 
   const load = async () => {
     setLoading(true);
@@ -180,6 +183,29 @@ export default function BudgetGridPage({ kind, title, budgetLabel, actualLabel }
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not add");
+    }
+  };
+
+  const startEdit = (catId: number, name: string) => {
+    setEditingId(catId);
+    setEditName(name);
+    setError(null);
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditName("");
+  };
+
+  const saveEdit = async (catId: number) => {
+    const name = editName.trim();
+    if (!name) return;
+    try {
+      await updateCategory(catId, { name });
+      cancelEdit();
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not rename");
     }
   };
 
@@ -313,15 +339,51 @@ export default function BudgetGridPage({ kind, title, budgetLabel, actualLabel }
               return (
                 <tr key={l.category_id} className="border-b border-gray-700/60 last:border-0 hover:bg-gray-700/20">
                   <td className="px-4 py-2 font-medium">
-                    <div className="flex items-center gap-2">
-                      <span>{l.category_name}</span>
-                      {cell.source === "manual" && (
-                        <span className="text-[10px] text-gray-500">manual</span>
-                      )}
-                      {cell.source === "transactions" && (
-                        <span className="text-[10px] text-gray-500">txns</span>
-                      )}
-                    </div>
+                    {editingId === l.category_id ? (
+                      <div className="flex items-center gap-1">
+                        <input
+                          autoFocus
+                          value={editName}
+                          onChange={(e) => setEditName(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") saveEdit(l.category_id);
+                            if (e.key === "Escape") cancelEdit();
+                          }}
+                          className="flex-1 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-sm"
+                        />
+                        <button
+                          onClick={() => saveEdit(l.category_id)}
+                          className="p-1 text-gray-400 hover:text-emerald-400"
+                          aria-label="Save name"
+                        >
+                          <Check size={15} />
+                        </button>
+                        <button
+                          onClick={cancelEdit}
+                          className="p-1 text-gray-400 hover:text-red-400"
+                          aria-label="Cancel rename"
+                        >
+                          <X size={15} />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="group flex items-center gap-2">
+                        <span>{l.category_name}</span>
+                        <button
+                          onClick={() => startEdit(l.category_id, l.category_name)}
+                          className="p-1 text-gray-600 hover:text-emerald-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                          aria-label={`Rename ${l.category_name}`}
+                        >
+                          <Pencil size={13} />
+                        </button>
+                        {cell.source === "manual" && (
+                          <span className="text-[10px] text-gray-500">manual</span>
+                        )}
+                        {cell.source === "transactions" && (
+                          <span className="text-[10px] text-gray-500">txns</span>
+                        )}
+                      </div>
+                    )}
                   </td>
                   <td className="px-4 py-2">
                     <EditableAmountCell
