@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { ActualCell, ActualLine, YearGrid, getActualsYear } from "../../api/client";
-import { MONTHS_SHORT, fmt, expenseLines } from "./trendUtils";
+import { MONTHS_SHORT, fmt, linesOfKind } from "./trendUtils";
 
 interface Props {
   year: number;
   setYear: (y: number) => void;
+  kind?: "expense" | "income";
 }
 
 // Heat class for an actual vs its budget. No budget => neutral, never an error.
@@ -20,7 +21,7 @@ function heatClass(cell: ActualCell): string {
   return "bg-red-500/30";
 }
 
-export default function YearlyTrendView({ year, setYear }: Props) {
+export default function YearlyTrendView({ year, setYear, kind = "expense" }: Props) {
   const [grid, setGrid] = useState<YearGrid | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -35,10 +36,10 @@ export default function YearlyTrendView({ year, setYear }: Props) {
   }, [year]);
 
   const lines = useMemo<ActualLine[]>(() => {
-    return expenseLines(grid?.lines ?? []).filter((l) =>
+    return linesOfKind(grid?.lines ?? [], kind).filter((l) =>
       l.cells.some((c) => (c.effective ?? 0) !== 0 || c.budget !== null),
     );
-  }, [grid]);
+  }, [grid, kind]);
 
   const rowTotals = lines.map((l) => l.cells.reduce((s, c) => s + (c.effective ?? 0), 0));
   const colTotals = MONTHS_SHORT.map((_, i) =>
@@ -68,7 +69,7 @@ export default function YearlyTrendView({ year, setYear }: Props) {
 
       {!loading && lines.length === 0 && (
         <div className="bg-gray-800 rounded-xl p-8 border border-gray-700 text-center text-gray-500">
-          No expense activity in {year}.
+          No {kind === "income" ? "income" : "expense"} activity in {year}.
         </div>
       )}
 

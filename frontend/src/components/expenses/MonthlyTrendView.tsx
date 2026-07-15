@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { ActualCell, ActualLine, YearGrid, getActualsYear } from "../../api/client";
-import { MONTHS, fmt, expenseLines } from "./trendUtils";
+import { MONTHS, fmt, linesOfKind } from "./trendUtils";
 import CategoryDrilldown from "./CategoryDrilldown";
 import TrendOverlay from "./TrendOverlay";
 
@@ -10,6 +10,7 @@ interface Props {
   monthIdx: number;
   setYear: (y: number) => void;
   setMonthIdx: (m: number) => void;
+  kind?: "expense" | "income";
 }
 
 interface Row {
@@ -20,7 +21,8 @@ interface Row {
   cell: ActualCell;
 }
 
-export default function MonthlyTrendView({ year, monthIdx, setYear, setMonthIdx }: Props) {
+export default function MonthlyTrendView({ year, monthIdx, setYear, setMonthIdx, kind = "expense" }: Props) {
+  const noun = kind === "income" ? "income" : "expense";
   const [grid, setGrid] = useState<YearGrid | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -35,7 +37,7 @@ export default function MonthlyTrendView({ year, monthIdx, setYear, setMonthIdx 
       .finally(() => setLoading(false));
   }, [year]);
 
-  const expLines: ActualLine[] = useMemo(() => expenseLines(grid?.lines ?? []), [grid]);
+  const expLines: ActualLine[] = useMemo(() => linesOfKind(grid?.lines ?? [], kind), [grid, kind]);
 
   const rows = useMemo<Row[]>(() => {
     return expLines
@@ -78,7 +80,7 @@ export default function MonthlyTrendView({ year, monthIdx, setYear, setMonthIdx 
           ))}
         </select>
         <span className="text-sm text-gray-400 ml-auto">
-          Total spend: <span className="text-gray-100 font-semibold">{fmt(totalActual)}</span>
+          {kind === "income" ? "Total income" : "Total spend"}: <span className="text-gray-100 font-semibold">{fmt(totalActual)}</span>
         </span>
       </div>
 
@@ -87,7 +89,7 @@ export default function MonthlyTrendView({ year, monthIdx, setYear, setMonthIdx 
 
       {!loading && rows.length === 0 && (
         <div className="bg-gray-800 rounded-xl p-8 border border-gray-700 text-center text-gray-500">
-          No expense activity in {MONTHS[monthIdx]} {year}.
+          No {noun} activity in {MONTHS[monthIdx]} {year}.
         </div>
       )}
 
@@ -136,7 +138,7 @@ export default function MonthlyTrendView({ year, monthIdx, setYear, setMonthIdx 
         </div>
       )}
 
-      {expLines.length > 0 && <TrendOverlay year={year} lines={expLines} />}
+      {expLines.length > 0 && <TrendOverlay year={year} lines={expLines} kind={kind} />}
 
       {drill && (
         <CategoryDrilldown
