@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ChevronLeft, ChevronRight, Plus, Maximize2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Maximize2, Trash2 } from "lucide-react";
 import {
   ActualCell,
   ActualLine,
@@ -8,6 +8,7 @@ import {
   bulkActuals,
   createCategory,
   deleteActual,
+  deleteCategory,
   fillForwardBudget,
   getActualsYear,
   getMonthTotals,
@@ -70,7 +71,7 @@ export default function BudgetGridPage({ kind, title, budgetLabel, actualLabel }
   const [openCatId, setOpenCatId] = useState<number | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [newName, setNewName] = useState("");
-  const [justAdded, setJustAdded] = useState<Set<number>>(new Set());
+  const [deleting, setDeleting] = useState<number | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -103,8 +104,10 @@ export default function BudgetGridPage({ kind, title, budgetLabel, actualLabel }
   }, [year, monthIdx]);
 
   const lines: ActualLine[] = (grid?.lines ?? []).filter((l) => l.kind === kind);
-  const qualifying = lines.filter(
-    (l) => l.cells.some((c) => c.budget !== null || c.source !== "none") || justAdded.has(l.category_id),
+  // Excel-style planning grid: show every line of this kind (including empty
+  // ones you just added) so you can enter budget/actual and add/remove rows.
+  const qualifying = [...lines].sort((a, b) =>
+    a.category_name.localeCompare(b.category_name),
   );
 
   const patchCell = (catId: number, mIdx: number, patch: Partial<ActualCell>) => {
@@ -170,11 +173,30 @@ export default function BudgetGridPage({ kind, title, budgetLabel, actualLabel }
   const handleAdd = async () => {
     const name = newName.trim();
     if (!name) return;
-    const cat = await createCategory({ name, kind });
-    setJustAdded((s) => new Set(s).add(cat.id));
-    setNewName("");
-    setAddOpen(false);
-    await load();
+    try {
+      await createCategory({ name, kind });
+      setNewName("");
+      setAddOpen(false);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not add");
+    }
+  };
+
+  const handleDelete = async (catId: number, name: string) => {
+    if (!window.confirm(`Remove "${name}"? This clears its budgets and actuals.`))
+      return;
+    setDeleting(catId);
+    setError(null);
+    try {
+      await deleteCategory(catId);
+      await load();
+      refreshTotals();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not remove");
+    } finally {
+      setDeleting(null);
+    }
   };
 
   // month totals for the summary strip (this kind only)
@@ -268,61 +290,110 @@ export default function BudgetGridPage({ kind, title, budgetLabel, actualLabel }
       )}
       {loading && <p className="text-gray-500">Loading…</p>}
 
-      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {qualifying.map((l) => {
-          const cell = l.cells[monthIdx];
-          const over = cell.effective !== null && cell.budget !== null && cell.effective - cell.budget;
-          return (
-            <div key={l.category_id} className="bg-gray-800 rounded-xl p-4 border border-gray-700">
-              <div className="flex items-center justify-between mb-3">
-                <p className="font-medium">{l.category_name}</p>
-                <button
-                  onClick={() => setOpenCatId(l.category_id)}
-                  className="text-gray-500 hover:text-emerald-400"
-                  aria-label="Open 12-month breakdown"
-                >
-                  <Maximize2 size={15} />
-                </button>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <p className="text-[11px] text-gray-400 mb-1">{budgetLabel}</p>
-                  <EditableAmountCell
-                    value={cell.budget}
-                    ariaLabel={`${l.category_name} ${budgetLabel}`}
-                    onCommit={(amt) => commitBudget(l.category_id, monthIdx, amt)}
-                    onPaste={(t) => pasteBudgets(l.category_id, t)}
-                  />
-                </div>
-                <div>
-                  <p className="text-[11px] text-gray-400 mb-1">
-                    {actualLabel}
-                    <span className="ml-1 text-gray-600">
-                      {cell.source === "manual" ? "· manual" : cell.source === "transactions" ? "· txns" : ""}
-                    </span>
-                  </p>
-                  <EditableAmountCell
-                    value={cell.effective}
-                    ariaLabel={`${l.category_name} ${actualLabel}`}
-                    onCommit={(amt) => commitActual(l.category_id, monthIdx, amt)}
-                    onPaste={(t) => pasteActuals(l.category_id, t)}
-                  />
-                </div>
-              </div>
-              {over !== false && (
-                <p className={`text-xs mt-2 ${over > 0 ? "text-red-400" : "text-emerald-400"}`}>
-                  {over > 0 ? "Over" : "Under"} by {fmt(Math.abs(over))}
-                </p>
-              )}
-            </div>
-          );
-        })}
-        {!loading && qualifying.length === 0 && (
-          <p className="text-gray-500 col-span-full text-center py-8">
-            No {kind === "income" ? "income lines" : "budgeted categories"} for {year} yet. Add one, or set a
-            {" "}{budgetLabel.toLowerCase()} to get started.
-          </p>
-        )}
+      <div className="bg-gray-800 rounded-xl border border-gray-700 overflow-hidden">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-gray-400 border-b border-gray-700 text-xs">
+              <th className="text-left font-medium px-4 py-3">
+                {kind === "income" ? "Income Line" : "Category"}
+              </th>
+              <th className="text-right font-medium px-4 py-3 w-40">{budgetLabel}</th>
+              <th className="text-right font-medium px-4 py-3 w-40">{actualLabel}</th>
+              <th className="text-right font-medium px-4 py-3 w-32">Variance</th>
+              <th className="px-2 py-3 w-20"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {qualifying.map((l) => {
+              const cell = l.cells[monthIdx];
+              const variance =
+                cell.effective !== null && cell.budget !== null
+                  ? cell.effective - cell.budget
+                  : null;
+              return (
+                <tr key={l.category_id} className="border-b border-gray-700/60 last:border-0 hover:bg-gray-700/20">
+                  <td className="px-4 py-2 font-medium">
+                    <div className="flex items-center gap-2">
+                      <span>{l.category_name}</span>
+                      {cell.source === "manual" && (
+                        <span className="text-[10px] text-gray-500">manual</span>
+                      )}
+                      {cell.source === "transactions" && (
+                        <span className="text-[10px] text-gray-500">txns</span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-4 py-2">
+                    <EditableAmountCell
+                      value={cell.budget}
+                      ariaLabel={`${l.category_name} ${budgetLabel}`}
+                      onCommit={(amt) => commitBudget(l.category_id, monthIdx, amt)}
+                      onPaste={(t) => pasteBudgets(l.category_id, t)}
+                    />
+                  </td>
+                  <td className="px-4 py-2">
+                    <EditableAmountCell
+                      value={cell.effective}
+                      ariaLabel={`${l.category_name} ${actualLabel}`}
+                      onCommit={(amt) => commitActual(l.category_id, monthIdx, amt)}
+                      onPaste={(t) => pasteActuals(l.category_id, t)}
+                    />
+                  </td>
+                  <td className="px-4 py-2 text-right">
+                    {variance === null ? (
+                      <span className="text-gray-600">—</span>
+                    ) : (
+                      <span className={variance > 0 ? "text-red-400" : "text-emerald-400"}>
+                        {fmt(variance)}
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-2 py-2">
+                    <div className="flex items-center justify-end gap-1">
+                      <button
+                        onClick={() => setOpenCatId(l.category_id)}
+                        className="p-1.5 text-gray-500 hover:text-emerald-400"
+                        aria-label={`Open 12-month breakdown for ${l.category_name}`}
+                      >
+                        <Maximize2 size={15} />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(l.category_id, l.category_name)}
+                        disabled={deleting === l.category_id}
+                        className="p-1.5 text-gray-500 hover:text-red-400 disabled:opacity-40"
+                        aria-label={`Remove ${l.category_name}`}
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+            {!loading && qualifying.length === 0 && (
+              <tr>
+                <td colSpan={5} className="text-gray-500 text-center py-8">
+                  No {kind === "income" ? "income lines" : "expense categories"} for {year} yet — add one with the
+                  {" "}<span className="text-emerald-400">Add {kind === "income" ? "Income Line" : "Category"}</span>{" "}
+                  button above.
+                </td>
+              </tr>
+            )}
+          </tbody>
+          {qualifying.length > 0 && (
+            <tfoot>
+              <tr className="border-t border-gray-700 font-semibold">
+                <td className="px-4 py-3">Total</td>
+                <td className="px-4 py-3 text-right">{fmt(budgetTotal)}</td>
+                <td className="px-4 py-3 text-right">{fmt(actualTotal)}</td>
+                <td className={`px-4 py-3 text-right ${diff > 0 ? "text-red-400" : "text-emerald-400"}`}>
+                  {fmt(diff)}
+                </td>
+                <td></td>
+              </tr>
+            </tfoot>
+          )}
+        </table>
       </div>
 
       {openLine && (
