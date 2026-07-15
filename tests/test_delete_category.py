@@ -62,6 +62,41 @@ def test_delete_missing_category_404(client):
     assert resp.status_code == 404
 
 
+def test_rename_category(client, db_session):
+    cat = Category(name="Grocers", kind="expense")
+    db_session.add(cat)
+    db_session.commit()
+    resp = client.patch(f"/api/categories/{cat.id}", json={"name": "Groceries"})
+    assert resp.status_code == 200
+    assert resp.json()["name"] == "Groceries"
+
+
+def test_rename_to_other_rejected(client, db_session):
+    cat = Category(name="Misc", kind="expense")
+    db_session.add(cat)
+    db_session.commit()
+    resp = client.patch(f"/api/categories/{cat.id}", json={"name": "Other"})
+    assert resp.status_code == 422
+
+
+def test_rename_to_existing_name_conflicts(client, db_session):
+    a = Category(name="Gas", kind="expense")
+    b = Category(name="Fuel", kind="expense")
+    db_session.add_all([a, b])
+    db_session.commit()
+    resp = client.patch(f"/api/categories/{b.id}", json={"name": "Gas"})
+    assert resp.status_code == 409
+
+
+def test_change_category_kind(client, db_session):
+    cat = Category(name="Bonus", kind="expense")
+    db_session.add(cat)
+    db_session.commit()
+    resp = client.patch(f"/api/categories/{cat.id}", json={"kind": "income"})
+    assert resp.status_code == 200
+    assert resp.json()["kind"] == "income"
+
+
 def test_delete_reparents_children(client, db_session):
     parent = Category(name="Housing", kind="expense")
     db_session.add(parent)

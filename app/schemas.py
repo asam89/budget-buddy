@@ -82,6 +82,11 @@ class CategoryCreate(BaseModel):
     color: Optional[str] = None
 
 
+class CategoryUpdate(BaseModel):
+    name: Optional[str] = None
+    kind: Optional[str] = None
+
+
 # --- Entities ---
 class EntityOut(BaseModel):
     id: int

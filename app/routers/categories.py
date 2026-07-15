@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import Bill, Budget, Category, ManualActual, Transaction, User
-from app.schemas import CategoryOut, CategoryCreate
+from app.schemas import CategoryOut, CategoryCreate, CategoryUpdate
 from app.services.category_guard import RESERVED_OTHER_MESSAGE, is_reserved_other
 from app.utils.auth import get_current_user
 
@@ -68,6 +68,43 @@ def create_category(
         color=data.color,
     )
     db.add(cat)
+    db.commit()
+    db.refresh(cat)
+    return cat
+
+
+@router.patch("/{category_id}", response_model=CategoryOut)
+def update_category(
+    category_id: int,
+    data: CategoryUpdate,
+    db: Session = Depends(get_db),
+    _user: User = Depends(get_current_user),
+):
+    """Rename an expense/income line or change its kind (inline grid edit)."""
+    cat = db.query(Category).filter(Category.id == category_id).first()
+    if cat is None:
+        raise HTTPException(status_code=404, detail="Category not found")
+
+    if data.name is not None:
+        name = data.name.strip()
+        if not name:
+            raise HTTPException(status_code=422, detail="Name cannot be blank")
+        if is_reserved_other(name):
+            raise HTTPException(status_code=422, detail=RESERVED_OTHER_MESSAGE)
+        clash = (
+            db.query(Category)
+            .filter(Category.name == name, Category.id != category_id)
+            .first()
+        )
+        if clash is not None:
+            raise HTTPException(status_code=409, detail="Category already exists")
+        cat.name = name
+
+    if data.kind is not None:
+        if data.kind not in ("expense", "income"):
+            raise HTTPException(status_code=422, detail="kind must be 'expense' or 'income'")
+        cat.kind = data.kind
+
     db.commit()
     db.refresh(cat)
     return cat
