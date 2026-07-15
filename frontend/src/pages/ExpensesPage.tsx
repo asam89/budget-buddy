@@ -3,16 +3,26 @@ import { useSearchParams } from "react-router-dom";
 import { LayoutGrid, CalendarDays, CalendarRange, Sparkles, ArrowLeft } from "lucide-react";
 import BudgetGridPage from "./BudgetGridPage";
 import BudgetSetupPage from "./BudgetSetupPage";
+import MonthlyTrendView from "../components/expenses/MonthlyTrendView";
+import YearlyTrendView from "../components/expenses/YearlyTrendView";
 
 type View = "tiles" | "monthly" | "yearly";
 
 const VIEW_KEY = "expenses.view";
+const YEAR_KEY = "expenses.year";
+const MONTH_KEY = "expenses.month";
 
 const TABS: { id: View; label: string; icon: typeof LayoutGrid }[] = [
   { id: "tiles", label: "Tiles", icon: LayoutGrid },
   { id: "monthly", label: "Monthly trend", icon: CalendarDays },
   { id: "yearly", label: "Yearly trend", icon: CalendarRange },
 ];
+
+function readStored(key: string, fallback: number): number {
+  const raw = sessionStorage.getItem(key);
+  const n = raw === null ? NaN : parseInt(raw, 10);
+  return Number.isFinite(n) ? n : fallback;
+}
 
 function Placeholder({ title }: { title: string }) {
   return (
@@ -26,13 +36,22 @@ export default function ExpensesPage() {
   const [params, setParams] = useSearchParams();
   const setupRequested = params.get("action") === "setup";
   const [setupOpen, setSetupOpen] = useState(setupRequested);
+  const now = new Date();
   const [view, setView] = useState<View>(
     () => (sessionStorage.getItem(VIEW_KEY) as View) || "tiles",
   );
+  const [year, setYear] = useState(() => readStored(YEAR_KEY, now.getFullYear()));
+  const [monthIdx, setMonthIdx] = useState(() => readStored(MONTH_KEY, now.getMonth()));
 
   useEffect(() => {
     sessionStorage.setItem(VIEW_KEY, view);
   }, [view]);
+  useEffect(() => {
+    sessionStorage.setItem(YEAR_KEY, String(year));
+  }, [year]);
+  useEffect(() => {
+    sessionStorage.setItem(MONTH_KEY, String(monthIdx));
+  }, [monthIdx]);
 
   useEffect(() => {
     if (setupRequested) setSetupOpen(true);
@@ -89,8 +108,10 @@ export default function ExpensesPage() {
       {view === "tiles" && (
         <BudgetGridPage kind="expense" budgetLabel="Budget" actualLabel="Actual" />
       )}
-      {view === "monthly" && <Placeholder title="The monthly trend view" />}
-      {view === "yearly" && <Placeholder title="The yearly trend view" />}
+      {view === "monthly" && (
+        <MonthlyTrendView year={year} monthIdx={monthIdx} setYear={setYear} setMonthIdx={setMonthIdx} />
+      )}
+      {view === "yearly" && <YearlyTrendView year={year} setYear={setYear} />}
 
       <Placeholder title="The AI insights summary" />
     </div>
