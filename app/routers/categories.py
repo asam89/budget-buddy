@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import Category, User
 from app.schemas import CategoryOut, CategoryCreate
+from app.services.category_guard import RESERVED_OTHER_MESSAGE, is_reserved_other
 from app.utils.auth import get_current_user
 
 router = APIRouter(prefix="/api/categories", tags=["categories"])
@@ -12,7 +13,7 @@ DEFAULT_CATEGORIES = [
     "Groceries", "Dining", "Transportation", "Gas", "Housing", "Utilities",
     "Insurance", "Healthcare", "Entertainment", "Shopping", "Personal Care",
     "Education", "Subscriptions", "Travel", "Gifts", "Salary", "Freelance",
-    "Investment Income", "Refund", "Transfer", "Other",
+    "Investment Income", "Refund", "Transfer",
 ]
 
 _INCOME_CATEGORY_NAMES = {"Salary", "Freelance", "Investment Income"}
@@ -51,6 +52,9 @@ def create_category(
     db: Session = Depends(get_db),
     _user: User = Depends(get_current_user),
 ):
+    if is_reserved_other(data.name):
+        raise HTTPException(status_code=422, detail=RESERVED_OTHER_MESSAGE)
+
     existing = db.query(Category).filter(Category.name == data.name).first()
     if existing:
         raise HTTPException(status_code=409, detail="Category already exists")

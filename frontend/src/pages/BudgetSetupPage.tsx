@@ -125,7 +125,12 @@ export default function BudgetSetupPage() {
     setError(null);
     try {
       const res = await commitBudgetSetup(
-        rows.map((r) => ({ category: r.category, monthly_amount: r.monthly_amount, kind: r.kind })),
+        rows.map((r) => ({
+          category: r.category?.trim() || null,
+          label: r.label,
+          monthly_amount: r.monthly_amount,
+          kind: r.kind,
+        })),
       );
       setResult(res);
       setProposal(null);
@@ -140,6 +145,10 @@ export default function BudgetSetupPage() {
   const totalMonthly = rows
     .filter((r) => r.kind === "expense")
     .reduce((s, r) => s + (r.monthly_amount || 0), 0);
+
+  // No catch-all category: every expense line must carry a real category
+  // before it can be saved. Unassigned lines block the commit.
+  const unassigned = rows.filter((r) => r.kind === "expense" && !r.category?.trim());
 
   return (
     <div className="space-y-6">
@@ -318,9 +327,14 @@ export default function BudgetSetupPage() {
                     <td className="p-2">
                       <input
                         list="budget-categories"
-                        value={r.category}
+                        value={r.category ?? ""}
+                        placeholder={r.kind === "expense" ? "Assign a category" : ""}
                         onChange={(e) => updateRow(i, { category: e.target.value })}
-                        className="bg-gray-700 border border-gray-600 rounded px-2 py-1 w-36"
+                        className={`bg-gray-700 border rounded px-2 py-1 w-36 ${
+                          r.kind === "expense" && !r.category?.trim()
+                            ? "border-amber-500 placeholder-amber-500/70"
+                            : "border-gray-600"
+                        }`}
                       />
                     </td>
                     <td className="p-2">
@@ -360,6 +374,13 @@ export default function BudgetSetupPage() {
             ))}
           </datalist>
 
+          {unassigned.length > 0 && (
+            <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3 text-sm text-amber-400">
+              {unassigned.length} expense line{unassigned.length > 1 ? "s" : ""} still need a
+              category. Assign a real category to each (there is no “Other” catch-all) before saving.
+            </div>
+          )}
+
           <div className="flex items-center justify-between flex-wrap gap-3">
             <p className="text-sm text-gray-400">
               Total monthly (expenses):{" "}
@@ -377,7 +398,7 @@ export default function BudgetSetupPage() {
               </button>
               <button
                 onClick={commit}
-                disabled={busy || rows.length === 0}
+                disabled={busy || rows.length === 0 || unassigned.length > 0}
                 className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm"
               >
                 <Check size={16} /> Create budget targets

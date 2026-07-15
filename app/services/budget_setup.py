@@ -16,10 +16,21 @@ from sqlalchemy.orm import Session
 
 from app.models import Budget, Category
 from app.services.ai_parser import _get_llm_provider
+from app.services.category_guard import is_reserved_other
 from app.services.llm import LLMProvider
 from app.services.sheet_mapper import clean_dataframe, detect_header_row, _safe_float
 
 logger = logging.getLogger(__name__)
+
+
+class UncategorizedItemsError(ValueError):
+    """Raised when a budget commit contains expense lines with no real category."""
+
+    def __init__(self, labels: list[str]) -> None:
+        self.labels = labels
+        super().__init__(
+            "These lines need a category before saving: " + ", ".join(labels)
+        )
 
 
 # Multiply a source amount by this factor to get a monthly figure.
@@ -265,12 +276,17 @@ def _align_and_build(
         period = prop.get("period") or raw.get("period_hint")
         if monthly is None:
             monthly = normalize_to_monthly(raw["amount"], period)
+        category = prop.get("category")
+        category = category.strip() if isinstance(category, str) else None
+        if is_reserved_other(category):
+            category = None
         aligned.append({
             "label": prop.get("label") or raw["label"],
             "source_amount": raw["amount"],
             "period": period or "monthly",
             "monthly_amount": round(float(monthly), 2),
-            "category": prop.get("category") or "Other",
+            "category": category or None,
+            "needs_category": not category,
             "kind": prop.get("kind") if prop.get("kind") in ("expense", "income") else "expense",
             "confidence": _clamp_conf(prop.get("confidence")),
             "note": prop.get("note") or "",
@@ -380,7 +396,7 @@ def _propose_heuristic(items: list[dict], categories: list[str]) -> list[dict]:
     for it in items:
         label = it["label"]
         period = it.get("period_hint") or "monthly"
-        category = "Other"
+        category = None
         ll = label.lower()
         for kw, cat in lower_cats.items():
             if kw in ll or ll in kw:
@@ -392,8 +408,10 @@ def _propose_heuristic(items: list[dict], categories: list[str]) -> list[dict]:
             "monthly_amount": normalize_to_monthly(it["amount"], period),
             "period": period,
             "kind": "expense",
-            "confidence": 0.3,
-            "note": "Heuristic (local AI unavailable)",
+            "confidence": 0.3 if category else 0.0,
+            "note": "Heuristic (local AI unavailable)"
+            if category
+            else "No confident category — assign one before saving",
         })
     return out
 
@@ -413,13 +431,25 @@ def commit_budget(db: Session, items: list[dict]) -> dict:
     upserted onto the active (no year_month) budget for that category. Income
     items are counted but do not create budget limits.
     """
+    # Never file into a catch-all: every expense line must carry a real
+    # category. Unassigned or reserved-name lines are rejected so the user
+    # assigns them in the review step instead of silently creating "Other".
+    unassigned = [
+        it.get("label") or "(unnamed line)"
+        for it in items
+        if it.get("kind") != "income"
+        and (not (it.get("category") or "").strip() or is_reserved_other(it.get("category")))
+    ]
+    if unassigned:
+        raise UncategorizedItemsError(unassigned)
+
     totals: dict[str, float] = {}
     income_count = 0
     for it in items:
         if it.get("kind") == "income":
             income_count += 1
             continue
-        name = str(it.get("category") or "Other").strip() or "Other"
+        name = str(it.get("category")).strip()
         amount = float(it.get("monthly_amount") or 0)
         totals[name] = round(totals.get(name, 0.0) + amount, 2)
 

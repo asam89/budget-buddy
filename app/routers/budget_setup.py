@@ -14,6 +14,7 @@ from typing import Iterator, Optional
 from app.database import get_db
 from app.models import User
 from app.services.budget_setup import (
+    UncategorizedItemsError,
     analyze_stream,
     commit_budget,
     parse_budget_dataframe,
@@ -29,7 +30,8 @@ class BudgetProposalItem(BaseModel):
     source_amount: float
     period: str
     monthly_amount: float
-    category: str
+    category: Optional[str] = None
+    needs_category: bool = False
     kind: str
     confidence: float
     note: str
@@ -161,7 +163,8 @@ async def analyze_budget_paste_stream(
 
 
 class BudgetCommitItem(BaseModel):
-    category: str
+    category: Optional[str] = None
+    label: Optional[str] = None
     monthly_amount: float
     kind: str = "expense"
 
@@ -179,4 +182,10 @@ def commit_budget_setup(
     """Create categories + monthly budget targets from the reviewed items."""
     if not req.items:
         raise HTTPException(status_code=400, detail="No budget items to commit")
-    return commit_budget(db, [item.model_dump() for item in req.items])
+    try:
+        return commit_budget(db, [item.model_dump() for item in req.items])
+    except UncategorizedItemsError as e:
+        raise HTTPException(
+            status_code=422,
+            detail={"message": str(e), "labels": e.labels},
+        )
