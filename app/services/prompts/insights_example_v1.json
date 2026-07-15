@@ -1,0 +1,22 @@
+{
+  "note": "Example findings payload shape passed to the insights prompt (insights_v1). Values are illustrative only.",
+  "period_label": "March 2026",
+  "period": "2026-03",
+  "totals": {
+    "expense_actual": 4200.0,
+    "expense_budget": 4000.0,
+    "income_actual": 6000.0,
+    "saved_actual": 1800.0,
+    "savings_rate_pct": 30.0
+  },
+  "top_categories": [
+    {"name": "Mortgage", "actual": 2000.0, "budget": 2000.0, "variance": 0.0, "share_pct": 47.6},
+    {"name": "Groceries", "actual": 1000.0, "budget": 900.0, "variance": 100.0, "share_pct": 23.8}
+  ],
+  "over_budget": [
+    {"name": "Groceries", "actual": 1000.0, "budget": 900.0, "overage": 100.0}
+  ],
+  "biggest_changes": [
+    {"name": "Groceries", "previous": 800.0, "current": 1000.0, "delta": 200.0}
+  ]
+}
