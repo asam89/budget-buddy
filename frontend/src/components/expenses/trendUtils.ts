@@ -26,3 +26,7 @@ export function lastDay(year: number, monthIdx: number) {
 export function expenseLines(lines: ActualLine[]): ActualLine[] {
   return lines.filter((l) => l.kind === "expense");
 }
+
+export function linesOfKind(lines: ActualLine[], kind: string): ActualLine[] {
+  return lines.filter((l) => l.kind === kind);
+}

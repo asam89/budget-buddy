@@ -12,14 +12,15 @@ const COLORS = [
 
 interface Props {
   year: number;
-  lines: ActualLine[]; // expense lines of the current year
+  lines: ActualLine[]; // lines of the current year for the active kind
+  kind?: "expense" | "income";
 }
 
 function monthlyTotals(lines: ActualLine[]): number[] {
   return MONTHS_SHORT.map((_, m) => lines.reduce((s, l) => s + (l.cells[m].effective ?? 0), 0));
 }
 
-export default function TrendOverlay({ year, lines }: Props) {
+export default function TrendOverlay({ year, lines, kind = "expense" }: Props) {
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [showAvg, setShowAvg] = useState(false);
   const [showMoM, setShowMoM] = useState(false);
@@ -43,13 +44,13 @@ export default function TrendOverlay({ year, lines }: Props) {
     let active = true;
     getActualsYear(year - 1)
       .then((g) => {
-        if (active) setPrevTotals(monthlyTotals(g.lines.filter((l) => l.kind === "expense")));
+        if (active) setPrevTotals(monthlyTotals(g.lines.filter((l) => l.kind === kind)));
       })
       .catch(() => active && setPrevTotals(null));
     return () => {
       active = false;
     };
-  }, [showYoY, year]);
+  }, [showYoY, year, kind]);
 
   const totals = useMemo(() => monthlyTotals(lines), [lines]);
 
