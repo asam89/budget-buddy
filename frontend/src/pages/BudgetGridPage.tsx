@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ChevronLeft, ChevronRight, Plus, Maximize2, Trash2, Pencil, Check, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Maximize2, Trash2, Pencil, Check, X, Copy } from "lucide-react";
 import {
   ActualCell,
   ActualLine,
@@ -62,12 +62,9 @@ export default function BudgetGridPage({ kind, title, budgetLabel, actualLabel }
   const now = new Date();
   const yearKey = `grid.${kind}.year`;
   const monthKey = `grid.${kind}.month`;
-  const carryKey = `grid.${kind}.carryAll`;
+
   const [year, setYear] = useState(() => readStored(yearKey, now.getFullYear()));
   const [monthIdx, setMonthIdx] = useState(() => readStored(monthKey, now.getMonth()));
-  const [carryAll, setCarryAll] = useState(
-    () => sessionStorage.getItem(carryKey) !== "false",
-  );
   const [entities, setEntities] = useState<Entity[]>([]);
   const [entityId, setEntityId] = useState<number | null>(() => {
     const raw = sessionStorage.getItem(ENTITY_KEY);
@@ -99,9 +96,6 @@ export default function BudgetGridPage({ kind, title, budgetLabel, actualLabel }
   useEffect(() => {
     sessionStorage.setItem(monthKey, String(monthIdx));
   }, [monthIdx, monthKey]);
-  useEffect(() => {
-    sessionStorage.setItem(carryKey, String(carryAll));
-  }, [carryAll, carryKey]);
   const [grid, setGrid] = useState<YearGrid | null>(null);
   const [totals, setTotals] = useState<MonthTotals | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -166,19 +160,6 @@ export default function BudgetGridPage({ kind, title, budgetLabel, actualLabel }
   };
 
   const commitActual = async (catId: number, mIdx: number, amount: number) => {
-    if (carryAll) {
-      await bulkActuals(
-        Array.from({ length: 12 }, (_, i) => ({
-          category_id: catId,
-          year_month: ym(year, i),
-          amount,
-        })),
-        entityId,
-      );
-      await load();
-      refreshTotals();
-      return;
-    }
     const cell = await upsertActual({ category_id: catId, year_month: ym(year, mIdx), amount, entity_id: entityId });
     patchCell(catId, mIdx, {
       effective: cell.effective,
@@ -190,17 +171,6 @@ export default function BudgetGridPage({ kind, title, budgetLabel, actualLabel }
   };
 
   const commitBudget = async (catId: number, mIdx: number, amount: number) => {
-    if (carryAll) {
-      await fillForwardBudget({
-        category_id: catId,
-        from_year_month: ym(year, 0),
-        monthly_limit: amount,
-        entity_id: entityId,
-      });
-      await load();
-      refreshTotals();
-      return;
-    }
     await upsertBudget({ category_id: catId, year_month: ym(year, mIdx), monthly_limit: amount, entity_id: entityId });
     patchCell(catId, mIdx, { budget: amount });
     if (mIdx === monthIdx) refreshTotals();
@@ -210,6 +180,31 @@ export default function BudgetGridPage({ kind, title, budgetLabel, actualLabel }
     await deleteActual(catId, ym(year, mIdx), entityId);
     await load();
     refreshTotals();
+  };
+
+  // Copy the selected month's budgets and manual actuals into the next month,
+  // then move to it so repeated clicks chain forward (July -> Aug -> Sep).
+  const copyToNextMonth = async () => {
+    if (monthIdx >= 11) return;
+    const from = monthIdx;
+    const to = monthIdx + 1;
+    setError(null);
+    try {
+      for (const l of qualifying) {
+        const b = l.cells[from].budget;
+        if (b != null) {
+          await upsertBudget({ category_id: l.category_id, year_month: ym(year, to), monthly_limit: b, entity_id: entityId });
+        }
+      }
+      const actualEntries = qualifying
+        .filter((l) => l.cells[from].manual_amount != null)
+        .map((l) => ({ category_id: l.category_id, year_month: ym(year, to), amount: l.cells[from].manual_amount as number }));
+      if (actualEntries.length) await bulkActuals(actualEntries, entityId);
+      await load();
+      setMonthIdx(to);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not copy to next month");
+    }
   };
 
   const fillForward = async (catId: number, mIdx: number, amount: number) => {
@@ -316,18 +311,19 @@ export default function BudgetGridPage({ kind, title, budgetLabel, actualLabel }
               <option key={m} value={i}>{m}</option>
             ))}
           </select>
-          <label
-            className="flex items-center gap-2 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm cursor-pointer select-none"
-            title="When on, a value you enter is applied to all 12 months of this year"
+          <button
+            onClick={copyToNextMonth}
+            disabled={monthIdx >= 11}
+            title={
+              monthIdx >= 11
+                ? "December is the last month of the year"
+                : `Copy ${MONTHS[monthIdx]}'s budgets and actuals into ${MONTHS[monthIdx + 1]}`
+            }
+            className="flex items-center gap-2 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm hover:border-emerald-500 disabled:opacity-40 disabled:hover:border-gray-700"
           >
-            <input
-              type="checkbox"
-              checked={carryAll}
-              onChange={(e) => setCarryAll(e.target.checked)}
-              className="accent-emerald-500"
-            />
-            Same every month
-          </label>
+            <Copy size={15} />
+            Copy to {monthIdx >= 11 ? "next month" : MONTHS[monthIdx + 1]}
+          </button>
           <button
             onClick={() => setAddOpen(!addOpen)}
             className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-2 rounded-lg text-sm"
