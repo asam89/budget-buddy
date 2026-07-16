@@ -184,9 +184,20 @@ export const uploadFile = (endpoint: string, file: File, accountId: number) => {
 export const getImportHistory = () => request<ImportSource[]>("/import/history");
 
 // Dashboard
-export const getDashboard = (months = 1) =>
-  request<DashboardSummary>(`/dashboard/summary?months=${months}`);
+export const getDashboard = (months = 1, entityId?: number | null) =>
+  request<DashboardSummary>(`/dashboard/summary?months=${months}${entityParam(entityId)}`);
 export const getBalances = () => request<BalanceItem[]>("/dashboard/balances");
+export interface EntityBreakdown {
+  entity_id: number;
+  entity_name: string;
+  entity_type: string;
+  color: string | null;
+  income: number;
+  expenses: number;
+  net: number;
+}
+export const getEntityBreakdown = (months = 1) =>
+  request<EntityBreakdown[]>(`/dashboard/entity-breakdown?months=${months}`);
 
 // Export helpers (trigger file download via window.open)
 export const exportTransactionsCsv = (params?: Record<string, string>) => {

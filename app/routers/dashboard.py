@@ -1,7 +1,8 @@
-from typing import Optional
+from typing import NamedTuple, Optional
 
 from datetime import datetime, timedelta, date
 from fastapi import APIRouter, Depends, Query
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -17,6 +18,62 @@ def _format_currency(amount: float) -> float:
     return round(amount, 2)
 
 
+class Contribution(NamedTuple):
+    amount: float
+    category_id: Optional[int]
+    category_name: str
+
+
+def _entity_contributions(
+    db: Session,
+    start_date: date,
+    end_date: Optional[date],
+    entity_id: Optional[int],
+    category_id: Optional[int] = None,
+) -> list[Contribution]:
+    """Confirmed contributions over ``[start_date, end_date)`` for an entity.
+
+    ``entity_id=None`` is the unscoped "All" view: every confirmed transaction
+    at its full amount. For a specific entity the amount attributed is the
+    direct transaction amount for txns it owns, plus split allocations to it
+    from txns owned by another/no entity — never both for the same txn, so a
+    transaction split across entities is not double counted.
+    """
+    def date_filter(q):
+        q = q.filter(Transaction.date >= start_date, Transaction.review_status == "confirmed")
+        if end_date is not None:
+            q = q.filter(Transaction.date < end_date)
+        return q
+
+    def cat_name(cat: Optional[Category]) -> str:
+        return cat.name if cat is not None else "Uncategorized"
+
+    if entity_id is None:
+        q = date_filter(db.query(Transaction))
+        if category_id is not None:
+            q = q.filter(Transaction.category_id == category_id)
+        return [Contribution(t.amount, t.category_id, cat_name(t.category_rel)) for t in q.all()]
+
+    direct_q = date_filter(db.query(Transaction)).filter(Transaction.entity_id == entity_id)
+    if category_id is not None:
+        direct_q = direct_q.filter(Transaction.category_id == category_id)
+    out = [Contribution(t.amount, t.category_id, cat_name(t.category_rel)) for t in direct_q.all()]
+
+    split_q = date_filter(
+        db.query(TransactionSplit, Transaction).join(
+            Transaction, TransactionSplit.transaction_id == Transaction.id
+        )
+    ).filter(
+        TransactionSplit.entity_id == entity_id,
+        or_(Transaction.entity_id.is_(None), Transaction.entity_id != entity_id),
+    )
+    if category_id is not None:
+        split_q = split_q.filter(Transaction.category_id == category_id)
+    for split, txn in split_q.all():
+        out.append(Contribution(split.amount, txn.category_id, cat_name(txn.category_rel)))
+    return out
+
+
 @router.get("/summary", response_model=DashboardSummary)
 def get_dashboard_summary(
     months: int = Query(default=1, ge=1, le=12),
@@ -30,43 +87,24 @@ def get_dashboard_summary(
     accounts = db.query(Account).filter(Account.is_active == True).all()
     total_balance = sum(a.current_balance for a in accounts)
 
-    txn_query = (
-        db.query(Transaction)
-        .filter(
-            Transaction.date >= start_date,
-            Transaction.review_status == "confirmed",
-        )
-    )
-    if entity_id is not None:
-        from sqlalchemy import or_
-        split_txn_ids = (
-            db.query(TransactionSplit.transaction_id)
-            .filter(TransactionSplit.entity_id == entity_id)
-            .subquery()
-        )
-        txn_query = txn_query.filter(
-            or_(Transaction.entity_id == entity_id, Transaction.id.in_(split_txn_ids))
-        )
+    contributions = _entity_contributions(db, start_date, None, entity_id)
 
-    transactions = txn_query.order_by(Transaction.date.desc()).all()
-
-    total_income = sum(abs(t.amount) for t in transactions if t.amount < 0)
-    total_expenses = sum(t.amount for t in transactions if t.amount > 0)
+    total_income = sum(-c.amount for c in contributions if c.amount < 0)
+    total_expenses = sum(c.amount for c in contributions if c.amount > 0)
     net_cash_flow = total_income - total_expenses
 
     spending_by_category: dict[str, float] = {}
-    for t in transactions:
-        if t.amount > 0:
-            cat_name = "Uncategorized"
-            if t.category_id and t.category_rel:
-                cat_name = t.category_rel.name
-            spending_by_category[cat_name] = spending_by_category.get(cat_name, 0) + t.amount
+    for c in contributions:
+        if c.amount > 0:
+            spending_by_category[c.category_name] = (
+                spending_by_category.get(c.category_name, 0) + c.amount
+            )
 
     monthly_trend = _compute_monthly_trend(db, months, entity_id)
     budget_status = _compute_budget_status(db, entity_id)
-    saved = _compute_saved(db, now.date())
+    saved = _compute_saved(db, now.date(), entity_id)
 
-    recent = transactions[:10]
+    recent = _recent_transactions(db, start_date, entity_id)
 
     return DashboardSummary(
         total_balance=_format_currency(total_balance),
@@ -82,7 +120,29 @@ def get_dashboard_summary(
     )
 
 
-def _compute_saved(db: Session, today: date) -> SavedSummary:
+def _recent_transactions(
+    db: Session, start_date: date, entity_id: Optional[int]
+) -> list[Transaction]:
+    """Up to 10 most recent confirmed transactions relevant to the entity view."""
+    q = db.query(Transaction).filter(
+        Transaction.date >= start_date,
+        Transaction.review_status == "confirmed",
+    )
+    if entity_id is not None:
+        split_ids = (
+            db.query(TransactionSplit.transaction_id)
+            .filter(TransactionSplit.entity_id == entity_id)
+            .scalar_subquery()
+        )
+        q = q.filter(
+            or_(Transaction.entity_id == entity_id, Transaction.id.in_(split_ids))
+        )
+    return q.order_by(Transaction.date.desc()).limit(10).all()
+
+
+def _compute_saved(
+    db: Session, today: date, entity_id: Optional[int] = None
+) -> SavedSummary:
     """Total-saved header figures via the shared aggregation (income - expenses).
 
     Reads the same ``effective_actual`` path as the Budgets/Income pages so all
@@ -90,8 +150,8 @@ def _compute_saved(db: Session, today: date) -> SavedSummary:
     full-year budgeted saved. Negative saved is preserved (overspent), not clamped.
     """
     year_month = today.strftime("%Y-%m")
-    mt = month_totals(db, year_month)
-    ys = year_summary(db, today.year, today=today)
+    mt = month_totals(db, year_month, entity_id)
+    ys = year_summary(db, today.year, today=today, entity_id=entity_id)
     return SavedSummary(
         year_month=year_month,
         month_income_actual=_format_currency(mt.income_actual),
@@ -119,28 +179,10 @@ def _compute_monthly_trend(db: Session, months: int, entity_id: Optional[int] = 
         else:
             month_end = now.date()
 
-        txn_q = (
-            db.query(Transaction)
-            .filter(
-                Transaction.date >= month_start,
-                Transaction.date < month_end,
-                Transaction.review_status == "confirmed",
-            )
-        )
-        if entity_id is not None:
-            from sqlalchemy import or_
-            split_ids = (
-                db.query(TransactionSplit.transaction_id)
-                .filter(TransactionSplit.entity_id == entity_id)
-                .subquery()
-            )
-            txn_q = txn_q.filter(
-                or_(Transaction.entity_id == entity_id, Transaction.id.in_(split_ids))
-            )
-        txns = txn_q.all()
+        contributions = _entity_contributions(db, month_start, month_end, entity_id)
 
-        income = sum(abs(t.amount) for t in txns if t.amount < 0)
-        expenses = sum(t.amount for t in txns if t.amount > 0)
+        income = sum(-c.amount for c in contributions if c.amount < 0)
+        expenses = sum(c.amount for c in contributions if c.amount > 0)
 
         trend.append({
             "month": month_start.strftime("%Y-%m"),
@@ -157,11 +199,10 @@ def _compute_budget_status(db: Session, entity_id: Optional[int] = None) -> list
     current_month = now.strftime("%Y-%m")
     month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0).date()
 
-    budgets = (
-        db.query(Budget)
-        .filter(Budget.is_active == True)
-        .all()
-    )
+    budget_q = db.query(Budget).filter(Budget.is_active == True)
+    if entity_id is not None:
+        budget_q = budget_q.filter(Budget.entity_id == entity_id)
+    budgets = budget_q.all()
 
     result = []
     for budget in budgets:
@@ -172,23 +213,10 @@ def _compute_budget_status(db: Session, entity_id: Optional[int] = None) -> list
         if not category:
             continue
 
-        spent_q = db.query(Transaction).filter(
-            Transaction.category_id == budget.category_id,
-            Transaction.date >= month_start,
-            Transaction.amount > 0,
-            Transaction.review_status == "confirmed",
+        contributions = _entity_contributions(
+            db, month_start, None, entity_id, category_id=budget.category_id
         )
-        if entity_id is not None:
-            from sqlalchemy import or_
-            split_ids = (
-                db.query(TransactionSplit.transaction_id)
-                .filter(TransactionSplit.entity_id == entity_id)
-                .subquery()
-            )
-            spent_q = spent_q.filter(
-                or_(Transaction.entity_id == entity_id, Transaction.id.in_(split_ids))
-            )
-        spent = sum(t.amount for t in spent_q.all())
+        spent = sum(c.amount for c in contributions if c.amount > 0)
 
         result.append({
             "category": category.name,
@@ -233,41 +261,15 @@ def get_entity_breakdown(
     result = []
 
     for entity in entities:
-        # Direct transactions
-        txns = (
-            db.query(Transaction)
-            .filter(
-                Transaction.entity_id == entity.id,
-                Transaction.date >= start_date,
-                Transaction.review_status == "confirmed",
-            )
-            .all()
-        )
-
-        income = sum(abs(t.amount) for t in txns if t.amount < 0)
-        expenses = sum(t.amount for t in txns if t.amount > 0)
-
-        # Add split-attributed amounts
-        splits = (
-            db.query(TransactionSplit)
-            .join(Transaction)
-            .filter(
-                TransactionSplit.entity_id == entity.id,
-                Transaction.date >= start_date,
-                Transaction.review_status == "confirmed",
-            )
-            .all()
-        )
-        for s in splits:
-            if s.amount < 0:
-                income += abs(s.amount)
-            else:
-                expenses += s.amount
+        contributions = _entity_contributions(db, start_date, None, entity.id)
+        income = sum(-c.amount for c in contributions if c.amount < 0)
+        expenses = sum(c.amount for c in contributions if c.amount > 0)
 
         result.append({
             "entity_id": entity.id,
             "entity_name": entity.name,
             "entity_type": entity.entity_type,
+            "color": entity.color,
             "income": _format_currency(income),
             "expenses": _format_currency(expenses),
             "net": _format_currency(income - expenses),
