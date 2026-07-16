@@ -4,11 +4,14 @@ import {
   getNeedsCategory,
   reviewTransaction,
   getCategories,
+  getEntities,
   inlineEditTransaction,
   Transaction,
   Category,
+  Entity,
 } from "../api/client";
 import { CheckCircle, XCircle, AlertCircle, Tag } from "lucide-react";
+import EntityBadge from "../components/EntityBadge";
 
 function fmt(n: number) {
   return new Intl.NumberFormat("en-CA", { style: "currency", currency: "CAD" }).format(n);
@@ -18,12 +21,28 @@ export default function ReviewPage() {
   const [pending, setPending] = useState<Transaction[]>([]);
   const [needsCategory, setNeedsCategory] = useState<Transaction[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [entities, setEntities] = useState<Entity[]>([]);
+  const [editingEntity, setEditingEntity] = useState<number | null>(null);
 
   useEffect(() => {
     getPendingReview().then(setPending);
     getNeedsCategory().then(setNeedsCategory);
     getCategories().then(setCategories);
+    getEntities().then((all) => setEntities(all.filter((e) => e.is_active)));
   }, []);
+
+  const patchLocalEntity = (id: number, entityId: number | null) => {
+    const apply = (list: Transaction[]): Transaction[] =>
+      list.map((t) => (t.id === id ? { ...t, entity_id: entityId } : t));
+    setPending(apply);
+    setNeedsCategory(apply);
+  };
+
+  const assignEntity = async (id: number, entityId: number | null) => {
+    await inlineEditTransaction(id, { entity_id: entityId ?? undefined });
+    patchLocalEntity(id, entityId);
+    setEditingEntity(null);
+  };
 
   const handleReview = async (id: number, status: string) => {
     await reviewTransaction(id, { review_status: status });
@@ -33,6 +52,27 @@ export default function ReviewPage() {
   const assignCategory = async (id: number, categoryId: number) => {
     await inlineEditTransaction(id, { category_id: categoryId });
     setNeedsCategory(needsCategory.filter((t) => t.id !== id));
+  };
+
+  const entityCell = (t: Transaction) => {
+    const ent = t.entity_id ? entities.find((e) => e.id === t.entity_id) : null;
+    if (editingEntity === t.id) {
+      return (
+        <select
+          autoFocus
+          value={t.entity_id ?? ""}
+          onChange={(e) => assignEntity(t.id, e.target.value ? Number(e.target.value) : null)}
+          onBlur={() => setEditingEntity(null)}
+          className="bg-gray-700 border border-emerald-500 rounded px-2 py-1 text-xs"
+        >
+          <option value="">— none —</option>
+          {entities.map((e) => (
+            <option key={e.id} value={e.id}>{e.name}</option>
+          ))}
+        </select>
+      );
+    }
+    return <EntityBadge entity={ent} onClick={() => setEditingEntity(t.id)} />;
   };
 
   return (
@@ -74,6 +114,7 @@ export default function ReviewPage() {
                     <span className={`font-medium ${t.amount < 0 ? "text-emerald-400" : "text-red-400"}`}>
                       {fmt(t.amount)}
                     </span>
+                    {entityCell(t)}
                   </div>
                   {t.notes && <p className="text-xs text-gray-500 mt-1">{t.notes}</p>}
                 </div>
@@ -128,6 +169,7 @@ export default function ReviewPage() {
                   <span className={`font-medium ${t.amount < 0 ? "text-emerald-400" : "text-red-400"}`}>
                     {fmt(t.amount)}
                   </span>
+                  {entityCell(t)}
                 </div>
                 <select
                   defaultValue=""
