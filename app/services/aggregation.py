@@ -319,27 +319,16 @@ class MonthTotals:
     saved_budget: float
 
 
-def month_totals(db: Session, year_month: str, entity_id: Optional[int] = None) -> MonthTotals:
-    """Aggregate every category into income/expense actual & budget totals.
-
-    Saved (actual) = income_actual - expense_actual.
-    Saved (budget) = income_budget - expense_budget.
-    """
-    categories = db.query(Category).all()
-    income_actual = expense_actual = 0.0
-    income_budget = expense_budget = 0.0
-
-    for cat in categories:
-        eff = effective_actual(db, cat, year_month, entity_id)
-        actual = eff.amount or 0.0
-        budget = budget_for(db, cat.id, year_month, entity_id) or 0.0
-        if cat.kind == "income":
+def _totals_from_grid_cells(year_month: str, cells: list[tuple[str, float, float]]) -> MonthTotals:
+    """Roll (kind, actual, budget) cell tuples into one month's totals."""
+    income_actual = expense_actual = income_budget = expense_budget = 0.0
+    for kind, actual, budget in cells:
+        if kind == "income":
             income_actual += actual
             income_budget += budget
         else:
             expense_actual += actual
             expense_budget += budget
-
     return MonthTotals(
         year_month=year_month,
         income_actual=round(income_actual, 2),
@@ -349,6 +338,26 @@ def month_totals(db: Session, year_month: str, entity_id: Optional[int] = None) 
         saved_actual=round(income_actual - expense_actual, 2),
         saved_budget=round(income_budget - expense_budget, 2),
     )
+
+
+def month_totals(db: Session, year_month: str, entity_id: Optional[int] = None) -> MonthTotals:
+    """Aggregate every category into income/expense actual & budget totals.
+
+    Reads the batched ``year_grid`` (a handful of queries) rather than doing a
+    per-category ``effective_actual``/``budget_for`` round trip, so this stays
+    fast on the encrypted SQLite even with many categories.
+
+    Saved (actual) = income_actual - expense_actual.
+    Saved (budget) = income_budget - expense_budget.
+    """
+    year = int(year_month[:4])
+    cells: list[tuple[str, float, float]] = []
+    for line in year_grid(db, year, entity_id):
+        for cell in line["cells"]:
+            if cell["year_month"] == year_month:
+                cells.append((line["kind"], cell["effective"] or 0.0, cell["budget"] or 0.0))
+                break
+    return _totals_from_grid_cells(year_month, cells)
 
 
 @dataclass
@@ -379,13 +388,23 @@ def year_summary(
     else:
         ytd_through = today.month
 
+    # One batched grid read for the whole year, then roll each month up locally.
+    per_month: dict[str, list[tuple[str, float, float]]] = {
+        f"{year:04d}-{m:02d}": [] for m in range(1, 13)
+    }
+    for line in year_grid(db, year, entity_id):
+        for cell in line["cells"]:
+            per_month[cell["year_month"]].append(
+                (line["kind"], cell["effective"] or 0.0, cell["budget"] or 0.0)
+            )
+
     months: list[MonthTotals] = []
     saved_budget_year = income_budget_year = expense_budget_year = 0.0
     saved_actual_ytd = income_actual_ytd = expense_actual_ytd = 0.0
 
     for m in range(1, 13):
         ym = f"{year:04d}-{m:02d}"
-        mt = month_totals(db, ym, entity_id)
+        mt = _totals_from_grid_cells(ym, per_month[ym])
         months.append(mt)
         saved_budget_year += mt.saved_budget
         income_budget_year += mt.income_budget
