@@ -20,6 +20,7 @@ import {
 } from "../api/client";
 import EditableAmountCell from "../components/budget/EditableAmountCell";
 import LineBreakdown from "../components/budget/LineBreakdown";
+import EntityBadge from "../components/EntityBadge";
 import { entityColor } from "../lib/entityColors";
 
 const MONTHS = [
@@ -68,17 +69,24 @@ export default function BudgetGridPage({ kind, title, budgetLabel, actualLabel }
   const [entities, setEntities] = useState<Entity[]>([]);
   const [entityId, setEntityId] = useState<number | null>(() => {
     const raw = sessionStorage.getItem(ENTITY_KEY);
+    if (raw === "all") return null;
     const n = raw === null ? NaN : parseInt(raw, 10);
     return Number.isFinite(n) ? n : null;
   });
+  // null entityId means either "All" (explicitly chosen) or "not yet defaulted".
+  const [editingEntityRow, setEditingEntityRow] = useState<number | null>(null);
+  const [newEntityId, setNewEntityId] = useState<number | null>(null);
 
   useEffect(() => {
     getEntities()
       .then((all) => {
         const active = all.filter((e) => e.is_active);
         setEntities(active);
+        // Preselect the default business for editing, unless the user has an
+        // explicit stored choice (a business id, or "all").
         setEntityId((cur) => {
           if (cur !== null && active.some((e) => e.id === cur)) return cur;
+          if (sessionStorage.getItem(ENTITY_KEY) === "all") return null;
           const def = active.find((e) => e.is_default) ?? active[0];
           return def ? def.id : null;
         });
@@ -87,7 +95,7 @@ export default function BudgetGridPage({ kind, title, budgetLabel, actualLabel }
   }, []);
 
   useEffect(() => {
-    if (entityId !== null) sessionStorage.setItem(ENTITY_KEY, String(entityId));
+    sessionStorage.setItem(ENTITY_KEY, entityId === null ? "all" : String(entityId));
   }, [entityId]);
 
   useEffect(() => {
@@ -233,12 +241,23 @@ export default function BudgetGridPage({ kind, title, budgetLabel, actualLabel }
     const name = newName.trim();
     if (!name) return;
     try {
-      await createCategory({ name, kind });
+      await createCategory({ name, kind, entity_id: newEntityId });
       setNewName("");
       setAddOpen(false);
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not add");
+    }
+  };
+
+  const assignLineEntity = async (catId: number, ownerId: number | null) => {
+    setEditingEntityRow(null);
+    try {
+      await updateCategory(catId, { entity_id: ownerId });
+      await load();
+      refreshTotals();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not reassign");
     }
   };
 
@@ -288,6 +307,14 @@ export default function BudgetGridPage({ kind, title, budgetLabel, actualLabel }
 
   const openLine = openCatId !== null ? lines.find((l) => l.category_id === openCatId) : undefined;
 
+  // Show the business column/tags only when there's more than one entity.
+  const showEntityCol = entities.length > 1;
+  // The unscoped "All" view rolls up every business, so cells are read-only.
+  const readOnly = entityId === null;
+  const colCount = showEntityCol ? 6 : 5;
+  const entityById = (id: number | null) =>
+    id === null ? null : entities.find((e) => e.id === id) ?? null;
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
@@ -325,7 +352,10 @@ export default function BudgetGridPage({ kind, title, budgetLabel, actualLabel }
             Copy to {monthIdx >= 11 ? "next month" : MONTHS[monthIdx + 1]}
           </button>
           <button
-            onClick={() => setAddOpen(!addOpen)}
+            onClick={() => {
+              if (!addOpen) setNewEntityId(entityId);
+              setAddOpen(!addOpen);
+            }}
             className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-2 rounded-lg text-sm"
           >
             <Plus size={16} /> Add {kind === "income" ? "Income Line" : "Category"}
@@ -335,6 +365,16 @@ export default function BudgetGridPage({ kind, title, budgetLabel, actualLabel }
 
       {entities.length > 1 && (
         <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={() => setEntityId(null)}
+            className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
+              entityId === null
+                ? "border-transparent bg-gray-200 text-gray-900 font-medium"
+                : "border-gray-700 text-gray-300 hover:border-gray-500"
+            }`}
+          >
+            All
+          </button>
           {entities.map((e) => {
             const active = e.id === entityId;
             const color = entityColor(e);
@@ -357,6 +397,12 @@ export default function BudgetGridPage({ kind, title, budgetLabel, actualLabel }
         </div>
       )}
 
+      {entityId === null && entities.length > 1 && (
+        <p className="text-xs text-gray-500">
+          All businesses — combined totals, read-only. Pick a business above to edit its values.
+        </p>
+      )}
+
       {addOpen && (
         <div className="bg-gray-800 rounded-xl p-4 border border-gray-700 flex gap-3">
           <input
@@ -367,6 +413,19 @@ export default function BudgetGridPage({ kind, title, budgetLabel, actualLabel }
             onKeyDown={(e) => e.key === "Enter" && handleAdd()}
             className="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm"
           />
+          {entities.length > 0 && (
+            <select
+              value={newEntityId ?? ""}
+              onChange={(e) => setNewEntityId(e.target.value ? Number(e.target.value) : null)}
+              className="bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm"
+              title="Which business owns this line"
+            >
+              <option value="">Shared (all)</option>
+              {entities.map((e) => (
+                <option key={e.id} value={e.id}>{e.name}</option>
+              ))}
+            </select>
+          )}
           <button onClick={handleAdd} className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg text-sm">
             Create
           </button>
@@ -416,6 +475,9 @@ export default function BudgetGridPage({ kind, title, budgetLabel, actualLabel }
               <th className="text-left font-medium px-4 py-3">
                 {kind === "income" ? "Income Line" : "Category"}
               </th>
+              {showEntityCol && (
+                <th className="text-left font-medium px-4 py-3 w-40">Business</th>
+              )}
               <th className="text-right font-medium px-4 py-3 w-40">{budgetLabel}</th>
               <th className="text-right font-medium px-4 py-3 w-40">{actualLabel}</th>
               <th className="text-right font-medium px-4 py-3 w-32">Variance</th>
@@ -478,9 +540,47 @@ export default function BudgetGridPage({ kind, title, budgetLabel, actualLabel }
                       </div>
                     )}
                   </td>
+                  {showEntityCol && (
+                    <td className="px-4 py-2">
+                      {editingEntityRow === l.category_id ? (
+                        <select
+                          autoFocus
+                          value={l.entity_id ?? ""}
+                          onChange={(e) =>
+                            assignLineEntity(
+                              l.category_id,
+                              e.target.value ? Number(e.target.value) : null,
+                            )
+                          }
+                          onBlur={() => setEditingEntityRow(null)}
+                          className="bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs"
+                        >
+                          <option value="">Shared (all)</option>
+                          {entities.map((e) => (
+                            <option key={e.id} value={e.id}>{e.name}</option>
+                          ))}
+                        </select>
+                      ) : l.entity_id === null ? (
+                        <span
+                          onClick={() => setEditingEntityRow(l.category_id)}
+                          title="Assign this line to a business"
+                          className="inline-flex items-center text-xs px-2 py-0.5 rounded-full border border-gray-700 text-gray-500 cursor-pointer hover:border-gray-500"
+                        >
+                          Shared
+                        </span>
+                      ) : (
+                        <EntityBadge
+                          entity={entityById(l.entity_id)}
+                          onClick={() => setEditingEntityRow(l.category_id)}
+                          title="Change owning business"
+                        />
+                      )}
+                    </td>
+                  )}
                   <td className="px-4 py-2">
                     <EditableAmountCell
                       value={cell.budget}
+                      readOnly={readOnly}
                       ariaLabel={`${l.category_name} ${budgetLabel}`}
                       onCommit={(amt) => commitBudget(l.category_id, monthIdx, amt)}
                       onPaste={(t) => pasteBudgets(l.category_id, t)}
@@ -489,6 +589,7 @@ export default function BudgetGridPage({ kind, title, budgetLabel, actualLabel }
                   <td className="px-4 py-2">
                     <EditableAmountCell
                       value={cell.effective}
+                      readOnly={readOnly}
                       ariaLabel={`${l.category_name} ${actualLabel}`}
                       onCommit={(amt) => commitActual(l.category_id, monthIdx, amt)}
                       onPaste={(t) => pasteActuals(l.category_id, t)}
@@ -527,7 +628,7 @@ export default function BudgetGridPage({ kind, title, budgetLabel, actualLabel }
             })}
             {!loading && qualifying.length === 0 && (
               <tr>
-                <td colSpan={5} className="text-gray-500 text-center py-8">
+                <td colSpan={colCount} className="text-gray-500 text-center py-8">
                   No {kind === "income" ? "income lines" : "expense categories"} for {year} yet — add one with the
                   {" "}<span className="text-emerald-400">Add {kind === "income" ? "Income Line" : "Category"}</span>{" "}
                   button above.
@@ -539,6 +640,7 @@ export default function BudgetGridPage({ kind, title, budgetLabel, actualLabel }
             <tfoot>
               <tr className="border-t border-gray-700 font-semibold">
                 <td className="px-4 py-3">Total</td>
+                {showEntityCol && <td className="px-4 py-3"></td>}
                 <td className="px-4 py-3 text-right">{fmt(budgetTotal)}</td>
                 <td className="px-4 py-3 text-right">{fmt(actualTotal)}</td>
                 <td className={`px-4 py-3 text-right ${diff > 0 ? "text-red-400" : "text-emerald-400"}`}>

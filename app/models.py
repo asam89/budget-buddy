@@ -69,6 +69,8 @@ class Category(Base):
     name = Column(String, unique=True, nullable=False)
     parent_id = Column(Integer, ForeignKey("categories.id"), nullable=True)
     kind = Column(String, nullable=False, default="expense")  # 'expense' | 'income'
+    # Owning business/entity for this line. NULL = shared (shows for every entity).
+    entity_id = Column(Integer, ForeignKey("entities.id"), nullable=True)
     icon = Column(String, nullable=True)
     color = Column(String, nullable=True)
     is_system = Column(Boolean, default=False)

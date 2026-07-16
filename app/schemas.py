@@ -68,6 +68,7 @@ class CategoryOut(BaseModel):
     name: str
     parent_id: Optional[int]
     kind: str
+    entity_id: Optional[int]
     icon: Optional[str]
     color: Optional[str]
     is_system: bool
@@ -78,6 +79,7 @@ class CategoryCreate(BaseModel):
     name: str
     kind: str = "expense"
     parent_id: Optional[int] = None
+    entity_id: Optional[int] = None
     icon: Optional[str] = None
     color: Optional[str] = None
 
@@ -85,6 +87,7 @@ class CategoryCreate(BaseModel):
 class CategoryUpdate(BaseModel):
     name: Optional[str] = None
     kind: Optional[str] = None
+    entity_id: Optional[int] = None
 
 
 # --- Entities ---

@@ -69,9 +69,9 @@ export const deleteTransaction = (id: number) =>
 // Categories
 export const getCategories = () => request<Category[]>("/categories/");
 export const seedCategories = () => request<Category[]>("/categories/seed-defaults", { method: "POST" });
-export const createCategory = (data: { name: string; kind: string }) =>
+export const createCategory = (data: { name: string; kind: string; entity_id?: number | null }) =>
   request<Category>("/categories/", { method: "POST", body: JSON.stringify(data) });
-export const updateCategory = (id: number, data: { name?: string; kind?: string }) =>
+export const updateCategory = (id: number, data: { name?: string; kind?: string; entity_id?: number | null }) =>
   request<Category>(`/categories/${id}`, { method: "PATCH", body: JSON.stringify(data) });
 export const deleteCategory = (id: number) =>
   request<{ deleted: boolean; budgets_deleted: number; manual_actuals_deleted: number }>(
@@ -129,6 +129,7 @@ export interface ActualLine {
   category_id: number;
   category_name: string;
   kind: string;
+  entity_id: number | null;
   cells: ActualCell[];
 }
 export interface YearGrid {
