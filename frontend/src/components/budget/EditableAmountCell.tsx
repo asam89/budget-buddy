@@ -10,6 +10,7 @@ interface Props {
   className?: string;
   ariaLabel?: string;
   autoOpen?: boolean;
+  readOnly?: boolean;
 }
 
 /** An Excel-style cell: type, commit on Enter/blur, Escape cancels, revert on failure. */
@@ -22,6 +23,7 @@ export default function EditableAmountCell({
   className = "",
   ariaLabel,
   autoOpen = false,
+  readOnly = false,
 }: Props) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
@@ -76,6 +78,17 @@ export default function EditableAmountCell({
       setEditing(false); // cancel: DB value stays
     }
   };
+
+  if (readOnly) {
+    return (
+      <span
+        aria-label={ariaLabel}
+        className={`block w-full text-right px-2 py-1 text-sm text-gray-400 ${className}`}
+      >
+        {display}
+      </span>
+    );
+  }
 
   if (editing) {
     return (

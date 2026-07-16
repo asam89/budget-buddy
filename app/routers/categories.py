@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import Bill, Budget, Category, ManualActual, Transaction, User
+from app.models import Bill, Budget, Category, Entity, ManualActual, Transaction, User
 from app.schemas import CategoryOut, CategoryCreate, CategoryUpdate
 from app.services.category_guard import RESERVED_OTHER_MESSAGE, is_reserved_other
 from app.utils.auth import get_current_user
@@ -38,6 +38,13 @@ def seed_defaults(
     return created
 
 
+def _require_entity(db: Session, entity_id: int) -> Entity:
+    ent = db.query(Entity).filter(Entity.id == entity_id).first()
+    if ent is None:
+        raise HTTPException(status_code=404, detail=f"Entity {entity_id} not found")
+    return ent
+
+
 @router.get("/", response_model=list[CategoryOut])
 def list_categories(
     db: Session = Depends(get_db),
@@ -59,11 +66,15 @@ def create_category(
     if existing:
         raise HTTPException(status_code=409, detail="Category already exists")
 
+    if data.entity_id is not None:
+        _require_entity(db, data.entity_id)
+
     kind = data.kind if data.kind in ("expense", "income") else "expense"
     cat = Category(
         name=data.name,
         kind=kind,
         parent_id=data.parent_id,
+        entity_id=data.entity_id,
         icon=data.icon,
         color=data.color,
     )
@@ -104,6 +115,13 @@ def update_category(
         if data.kind not in ("expense", "income"):
             raise HTTPException(status_code=422, detail="kind must be 'expense' or 'income'")
         cat.kind = data.kind
+
+    # NULL is a meaningful value here ("Shared"), so only touch entity_id when the
+    # client actually sent the field.
+    if "entity_id" in data.model_fields_set:
+        if data.entity_id is not None:
+            _require_entity(db, data.entity_id)
+        cat.entity_id = data.entity_id
 
     db.commit()
     db.refresh(cat)

@@ -191,7 +191,14 @@ def year_grid(db: Session, year: int, entity_id: Optional[int] = None) -> list[d
     transactions plus split allocations for the transaction sums, and
     entity-owned rows for manual actuals and budgets.
     """
-    categories = db.query(Category).order_by(Category.name).all()
+    # A specific entity view shows lines it owns plus shared (unowned) lines;
+    # the unscoped "All" view shows every line.
+    cat_q = db.query(Category)
+    if entity_id is not None:
+        cat_q = cat_q.filter(
+            or_(Category.entity_id.is_(None), Category.entity_id == entity_id)
+        )
+    categories = cat_q.order_by(Category.name).all()
     year_prefix = f"{year:04d}-"
     year_start = date(year, 1, 1)
     year_end = date(year, 12, 31)
@@ -303,6 +310,7 @@ def year_grid(db: Session, year: int, entity_id: Optional[int] = None) -> list[d
             "category_id": cat.id,
             "category_name": cat.name,
             "kind": cat.kind,
+            "entity_id": cat.entity_id,
             "cells": cells,
         })
     return lines
