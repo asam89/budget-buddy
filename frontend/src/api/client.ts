@@ -412,6 +412,28 @@ export const generateInsights = (yearMonth: string, force = false) =>
     { method: "POST" },
   );
 
+// App version / self-update
+export interface VersionInfo {
+  available: boolean;
+  version: string;
+  commit: string | null;
+  commit_date: string | null;
+  dirty: boolean;
+}
+export interface UpdateCheck {
+  available: boolean;
+  status: "up_to_date" | "behind" | "ahead" | "diverged" | "unknown";
+  behind: number;
+  ahead: number;
+  local_version: string;
+  latest_version: string;
+  error: string | null;
+}
+export const getVersion = () => request<VersionInfo>("/version");
+export const checkForUpdate = () => request<UpdateCheck>("/version/check");
+export const startUpdate = () => request<{ started: boolean }>("/version/update", { method: "POST" });
+export const getUpdateLog = () => request<{ lines: string[] }>("/version/update/log");
+
 export interface BudgetCommitResult {
   categories_created: number;
   budgets_created: number;
