@@ -41,6 +41,7 @@ import {
   Download,
   FileSpreadsheet,
 } from "lucide-react";
+import EntityBadge from "../components/EntityBadge";
 
 function fmt(n: number) {
   return new Intl.NumberFormat("en-CA", {
@@ -334,15 +335,16 @@ export default function TransactionsPage() {
               </select>
             );
           }
+          const ent = t.entity_id
+            ? entities.find((e) => e.id === t.entity_id)
+            : null;
           return (
-            <span
-              className="cursor-pointer hover:text-emerald-400 text-xs bg-gray-700 px-2 py-0.5 rounded"
-              onDoubleClick={() =>
+            <EntityBadge
+              entity={ent}
+              onClick={() =>
                 startEdit(t.id, "entity_id", String(t.entity_id || ""))
               }
-            >
-              {t.entity_id ? entityMap[t.entity_id] || `#${t.entity_id}` : "—"}
-            </span>
+            />
           );
         },
       },
