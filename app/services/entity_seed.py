@@ -5,12 +5,27 @@ from Settings, so a fresh install starts with just Personal (marked default)
 and the user adds their own. Idempotent: safe to run on every startup.
 """
 
+from typing import Optional
+
 from sqlalchemy.orm import Session
 
 from app.models import Entity
 
 DEFAULT_ENTITY_NAME = "Personal"
 DEFAULT_ENTITY_COLOR = "#10b981"
+
+
+def default_entity_id(db: Session) -> Optional[int]:
+    """Id of the default entity, or None if none exists yet."""
+    ent = db.query(Entity).filter(Entity.is_default == True).first()  # noqa: E712
+    return ent.id if ent else None
+
+
+def resolve_entity_id(db: Session, entity_id: Optional[int]) -> Optional[int]:
+    """For writes: fall back to the default entity when none is supplied."""
+    if entity_id is not None:
+        return entity_id
+    return default_entity_id(db)
 
 
 def seed_default_entity(db: Session) -> Entity:

@@ -15,9 +15,10 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Optional
 
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from app.models import Budget, Category, ManualActual, Transaction
+from app.models import Budget, Category, ManualActual, Transaction, TransactionSplit
 
 _YM_RE = re.compile(r"^\d{4}-\d{2}$")
 
@@ -46,46 +47,91 @@ class EffectiveActual:
     manual_amount: Optional[float]  # the manual value if one exists
 
 
-def transaction_sum(db: Session, category: Category, year_month: str) -> float:
+def _scope_owned(query, column, entity_id: Optional[int]):
+    """Scope a budgets/manual_actuals query to one entity.
+
+    ``entity_id=None`` means the unscoped "All" view (every row). Otherwise
+    rows are matched by exact ``entity_id``; startup backfill assigns legacy
+    NULL rows to the default entity so nothing is orphaned.
+    """
+    if entity_id is None:
+        return query
+    return query.filter(column == entity_id)
+
+
+def _kind_sum(kind: str, amounts) -> float:
+    """Sum signed amounts into a non-negative actual per category kind.
+
+    Expense = positive amounts; income = absolute value of negative amounts.
+    """
+    if kind == "income":
+        return sum(-a for a in amounts if a < 0)
+    return sum(a for a in amounts if a > 0)
+
+
+def transaction_sum(
+    db: Session, category: Category, year_month: str, entity_id: Optional[int] = None
+) -> float:
     """Confirmed-transaction actual for a category in a month.
 
     Sign follows the category kind: expense = sum of positive amounts,
     income = sum of the absolute value of negative amounts. Transfers are
     excluded (they double-count). Always returned non-negative.
+
+    When ``entity_id`` is given, only that entity's money counts: transactions
+    directly assigned to it (full amount) plus split allocations to it from
+    transactions owned by another/no entity (split amount), never both for the
+    same transaction.
     """
     start, end = month_bounds(year_month)
-    txns = (
-        db.query(Transaction)
-        .filter(
-            Transaction.category_id == category.id,
-            Transaction.date >= start,
-            Transaction.date <= end,
-            Transaction.review_status == "confirmed",
-            Transaction.txn_type != "transfer",
-        )
-        .all()
+    base = db.query(Transaction).filter(
+        Transaction.category_id == category.id,
+        Transaction.date >= start,
+        Transaction.date <= end,
+        Transaction.review_status == "confirmed",
+        Transaction.txn_type != "transfer",
     )
-    if category.kind == "income":
-        return round(sum(-t.amount for t in txns if t.amount < 0), 2)
-    return round(sum(t.amount for t in txns if t.amount > 0), 2)
+    if entity_id is None:
+        amounts = [t.amount for t in base.all()]
+        return round(_kind_sum(category.kind, amounts), 2)
+
+    direct = [t.amount for t in base.filter(Transaction.entity_id == entity_id).all()]
+    split_amounts = [
+        s.amount
+        for s in (
+            db.query(TransactionSplit)
+            .join(Transaction, TransactionSplit.transaction_id == Transaction.id)
+            .filter(
+                Transaction.category_id == category.id,
+                Transaction.date >= start,
+                Transaction.date <= end,
+                Transaction.review_status == "confirmed",
+                Transaction.txn_type != "transfer",
+                TransactionSplit.entity_id == entity_id,
+                or_(Transaction.entity_id.is_(None), Transaction.entity_id != entity_id),
+            )
+            .all()
+        )
+    ]
+    return round(_kind_sum(category.kind, direct) + _kind_sum(category.kind, split_amounts), 2)
 
 
-def effective_actual(db: Session, category: Category, year_month: str) -> EffectiveActual:
+def effective_actual(
+    db: Session, category: Category, year_month: str, entity_id: Optional[int] = None
+) -> EffectiveActual:
     """Apply the reconciliation rule for one (category, month).
 
     A manual actual, if present, is THE actual; the transaction sum stays
     retrievable beside it. Otherwise the transaction sum is the actual. If
     neither exists the cell is empty. Never manual + transactions.
     """
-    txn_sum = transaction_sum(db, category, year_month)
-    manual = (
-        db.query(ManualActual)
-        .filter(
-            ManualActual.category_id == category.id,
-            ManualActual.year_month == year_month,
-        )
-        .first()
+    txn_sum = transaction_sum(db, category, year_month, entity_id)
+    manual_q = db.query(ManualActual).filter(
+        ManualActual.category_id == category.id,
+        ManualActual.year_month == year_month,
     )
+    manual_q = _scope_owned(manual_q, ManualActual.entity_id, entity_id)
+    manual = manual_q.first()
     if manual is not None:
         return EffectiveActual(
             amount=round(manual.amount, 2),
@@ -100,92 +146,122 @@ def effective_actual(db: Session, category: Category, year_month: str) -> Effect
     return EffectiveActual(amount=None, source="none", transaction_sum=0.0, manual_amount=None)
 
 
-def budget_for(db: Session, category_id: int, year_month: str) -> Optional[float]:
+def budget_for(
+    db: Session, category_id: int, year_month: str, entity_id: Optional[int] = None
+) -> Optional[float]:
     """The budget for a category in a month.
 
     A month-specific (dated) budget wins; otherwise the every-month
     (``year_month IS NULL``) budget is the default for that month.
     """
-    dated = (
-        db.query(Budget)
-        .filter(
+    dated = _scope_owned(
+        db.query(Budget).filter(
             Budget.category_id == category_id,
             Budget.is_active == True,  # noqa: E712
             Budget.year_month == year_month,
-        )
-        .first()
-    )
+        ),
+        Budget.entity_id,
+        entity_id,
+    ).first()
     if dated is not None:
         return round(dated.monthly_limit, 2)
-    every_month = (
-        db.query(Budget)
-        .filter(
+    every_month = _scope_owned(
+        db.query(Budget).filter(
             Budget.category_id == category_id,
             Budget.is_active == True,  # noqa: E712
             Budget.year_month.is_(None),
-        )
-        .first()
-    )
+        ),
+        Budget.entity_id,
+        entity_id,
+    ).first()
     if every_month is not None:
         return round(every_month.monthly_limit, 2)
     return None
 
 
-def year_grid(db: Session, year: int) -> list[dict]:
+def year_grid(db: Session, year: int, entity_id: Optional[int] = None) -> list[dict]:
     """Batched full-year grid: every category x 12 months, in a constant
     number of queries (no per-cell round trips).
 
     Returns the same per-line/per-cell shape as the per-cell path so the API
     response is byte-for-byte compatible; ``effective_actual``/``budget_for``
     stay as the single-cell source of truth for other callers.
+
+    When ``entity_id`` is given the grid is scoped to that entity: direct
+    transactions plus split allocations for the transaction sums, and
+    entity-owned rows for manual actuals and budgets.
     """
     categories = db.query(Category).order_by(Category.name).all()
     year_prefix = f"{year:04d}-"
     year_start = date(year, 1, 1)
     year_end = date(year, 12, 31)
 
-    # 1 query: all confirmed, non-transfer transactions in the year.
+    # 1-2 queries: confirmed, non-transfer transaction amounts in the year.
     pos: dict[tuple[int, int], float] = {}   # (category_id, month) -> sum(amount>0)
     negabs: dict[tuple[int, int], float] = {}  # (category_id, month) -> sum(-amount, amount<0)
-    txns = (
-        db.query(
-            Transaction.category_id,
-            Transaction.date,
-            Transaction.amount,
-        )
-        .filter(
-            Transaction.category_id.isnot(None),
-            Transaction.date >= year_start,
-            Transaction.date <= year_end,
-            Transaction.review_status == "confirmed",
-            Transaction.txn_type != "transfer",
-        )
-        .all()
-    )
-    for cat_id, txn_date, amount in txns:
-        key = (cat_id, txn_date.month)
+
+    def _bucket(cat_id: int, month: int, amount: float) -> None:
+        key = (cat_id, month)
         if amount > 0:
             pos[key] = pos.get(key, 0.0) + amount
         elif amount < 0:
             negabs[key] = negabs.get(key, 0.0) + (-amount)
 
-    # 1 query: all manual actuals for the year.
+    txn_q = db.query(
+        Transaction.category_id,
+        Transaction.date,
+        Transaction.amount,
+    ).filter(
+        Transaction.category_id.isnot(None),
+        Transaction.date >= year_start,
+        Transaction.date <= year_end,
+        Transaction.review_status == "confirmed",
+        Transaction.txn_type != "transfer",
+    )
+    if entity_id is not None:
+        txn_q = txn_q.filter(Transaction.entity_id == entity_id)
+    for cat_id, txn_date, amount in txn_q.all():
+        _bucket(cat_id, txn_date.month, amount)
+
+    if entity_id is not None:
+        split_rows = (
+            db.query(Transaction.category_id, Transaction.date, TransactionSplit.amount)
+            .join(TransactionSplit, TransactionSplit.transaction_id == Transaction.id)
+            .filter(
+                Transaction.category_id.isnot(None),
+                Transaction.date >= year_start,
+                Transaction.date <= year_end,
+                Transaction.review_status == "confirmed",
+                Transaction.txn_type != "transfer",
+                TransactionSplit.entity_id == entity_id,
+                or_(Transaction.entity_id.is_(None), Transaction.entity_id != entity_id),
+            )
+            .all()
+        )
+        for cat_id, txn_date, amount in split_rows:
+            _bucket(cat_id, txn_date.month, amount)
+
+    # 1 query: all manual actuals for the year (scoped to entity).
     manuals: dict[tuple[int, str], float] = {}
-    for cat_id, ym, amount in (
+    manual_q = _scope_owned(
         db.query(ManualActual.category_id, ManualActual.year_month, ManualActual.amount)
-        .filter(ManualActual.year_month.like(f"{year_prefix}%"))
-        .all()
-    ):
+        .filter(ManualActual.year_month.like(f"{year_prefix}%")),
+        ManualActual.entity_id,
+        entity_id,
+    )
+    for cat_id, ym, amount in manual_q.all():
         manuals[(cat_id, ym)] = amount
 
     # 1 query: all active budgets (dated in-year + every-month NULL rows).
     dated_budgets: dict[tuple[int, str], float] = {}
     every_month_budgets: dict[int, float] = {}
-    for cat_id, ym, limit in (
+    budget_q = _scope_owned(
         db.query(Budget.category_id, Budget.year_month, Budget.monthly_limit)
-        .filter(Budget.is_active == True)  # noqa: E712
-        .all()
-    ):
+        .filter(Budget.is_active == True),  # noqa: E712
+        Budget.entity_id,
+        entity_id,
+    )
+    for cat_id, ym, limit in budget_q.all():
         if ym is None:
             every_month_budgets.setdefault(cat_id, limit)
         elif ym.startswith(year_prefix):
@@ -243,7 +319,7 @@ class MonthTotals:
     saved_budget: float
 
 
-def month_totals(db: Session, year_month: str) -> MonthTotals:
+def month_totals(db: Session, year_month: str, entity_id: Optional[int] = None) -> MonthTotals:
     """Aggregate every category into income/expense actual & budget totals.
 
     Saved (actual) = income_actual - expense_actual.
@@ -254,9 +330,9 @@ def month_totals(db: Session, year_month: str) -> MonthTotals:
     income_budget = expense_budget = 0.0
 
     for cat in categories:
-        eff = effective_actual(db, cat, year_month)
+        eff = effective_actual(db, cat, year_month, entity_id)
         actual = eff.amount or 0.0
-        budget = budget_for(db, cat.id, year_month) or 0.0
+        budget = budget_for(db, cat.id, year_month, entity_id) or 0.0
         if cat.kind == "income":
             income_actual += actual
             income_budget += budget
@@ -292,7 +368,9 @@ class YearSummary:
     ytd_through_month: int  # 1..12
 
 
-def year_summary(db: Session, year: int, today: Optional[date] = None) -> YearSummary:
+def year_summary(
+    db: Session, year: int, today: Optional[date] = None, entity_id: Optional[int] = None
+) -> YearSummary:
     today = today or datetime.utcnow().date()
     if year < today.year:
         ytd_through = 12
@@ -307,7 +385,7 @@ def year_summary(db: Session, year: int, today: Optional[date] = None) -> YearSu
 
     for m in range(1, 13):
         ym = f"{year:04d}-{m:02d}"
-        mt = month_totals(db, ym)
+        mt = month_totals(db, ym, entity_id)
         months.append(mt)
         saved_budget_year += mt.saved_budget
         income_budget_year += mt.income_budget

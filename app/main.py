@@ -13,6 +13,7 @@ from app.routers import (
 )
 from app.services.other_migration import silent_delete_if_empty
 from app.services.entity_seed import seed_default_entity
+from app.services.entity_scope_migration import migrate_entity_scoping
 
 
 @asynccontextmanager
@@ -21,6 +22,7 @@ async def lifespan(app: FastAPI):
     with SessionLocal() as db:
         silent_delete_if_empty(db)
         seed_default_entity(db)
+    migrate_entity_scoping(engine)
     yield
 
 

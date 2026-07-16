@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight, Plus, Maximize2, Trash2, Pencil, Check, X } 
 import {
   ActualCell,
   ActualLine,
+  Entity,
   MonthTotals,
   YearGrid,
   bulkActuals,
@@ -11,6 +12,7 @@ import {
   deleteCategory,
   fillForwardBudget,
   getActualsYear,
+  getEntities,
   getMonthTotals,
   updateCategory,
   upsertActual,
@@ -18,6 +20,7 @@ import {
 } from "../api/client";
 import EditableAmountCell from "../components/budget/EditableAmountCell";
 import LineBreakdown from "../components/budget/LineBreakdown";
+import { entityColor } from "../lib/entityColors";
 
 const MONTHS = [
   "January", "February", "March", "April", "May", "June",
@@ -52,6 +55,9 @@ function readStored(key: string, fallback: number): number {
   return Number.isFinite(n) ? n : fallback;
 }
 
+// Entity selection is shared across the Expenses and Income grids.
+const ENTITY_KEY = "grid.entity";
+
 export default function BudgetGridPage({ kind, title, budgetLabel, actualLabel }: Props) {
   const now = new Date();
   const yearKey = `grid.${kind}.year`;
@@ -62,6 +68,30 @@ export default function BudgetGridPage({ kind, title, budgetLabel, actualLabel }
   const [carryAll, setCarryAll] = useState(
     () => sessionStorage.getItem(carryKey) !== "false",
   );
+  const [entities, setEntities] = useState<Entity[]>([]);
+  const [entityId, setEntityId] = useState<number | null>(() => {
+    const raw = sessionStorage.getItem(ENTITY_KEY);
+    const n = raw === null ? NaN : parseInt(raw, 10);
+    return Number.isFinite(n) ? n : null;
+  });
+
+  useEffect(() => {
+    getEntities()
+      .then((all) => {
+        const active = all.filter((e) => e.is_active);
+        setEntities(active);
+        setEntityId((cur) => {
+          if (cur !== null && active.some((e) => e.id === cur)) return cur;
+          const def = active.find((e) => e.is_default) ?? active[0];
+          return def ? def.id : null;
+        });
+      })
+      .catch(() => setEntities([]));
+  }, []);
+
+  useEffect(() => {
+    if (entityId !== null) sessionStorage.setItem(ENTITY_KEY, String(entityId));
+  }, [entityId]);
 
   useEffect(() => {
     sessionStorage.setItem(yearKey, String(year));
@@ -87,7 +117,7 @@ export default function BudgetGridPage({ kind, title, budgetLabel, actualLabel }
     setLoading(true);
     setError(null);
     try {
-      setGrid(await getActualsYear(year));
+      setGrid(await getActualsYear(year, entityId));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load");
     } finally {
@@ -97,7 +127,7 @@ export default function BudgetGridPage({ kind, title, budgetLabel, actualLabel }
 
   const refreshTotals = async () => {
     try {
-      setTotals(await getMonthTotals(ym(year, monthIdx)));
+      setTotals(await getMonthTotals(ym(year, monthIdx), entityId));
     } catch {
       setTotals(null);
     }
@@ -106,12 +136,12 @@ export default function BudgetGridPage({ kind, title, budgetLabel, actualLabel }
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [year]);
+  }, [year, entityId]);
 
   useEffect(() => {
     refreshTotals();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [year, monthIdx]);
+  }, [year, monthIdx, entityId]);
 
   const lines: ActualLine[] = (grid?.lines ?? []).filter((l) => l.kind === kind);
   // Excel-style planning grid: show every line of this kind (including empty
@@ -143,12 +173,13 @@ export default function BudgetGridPage({ kind, title, budgetLabel, actualLabel }
           year_month: ym(year, i),
           amount,
         })),
+        entityId,
       );
       await load();
       refreshTotals();
       return;
     }
-    const cell = await upsertActual({ category_id: catId, year_month: ym(year, mIdx), amount });
+    const cell = await upsertActual({ category_id: catId, year_month: ym(year, mIdx), amount, entity_id: entityId });
     patchCell(catId, mIdx, {
       effective: cell.effective,
       source: cell.source,
@@ -164,24 +195,25 @@ export default function BudgetGridPage({ kind, title, budgetLabel, actualLabel }
         category_id: catId,
         from_year_month: ym(year, 0),
         monthly_limit: amount,
+        entity_id: entityId,
       });
       await load();
       refreshTotals();
       return;
     }
-    await upsertBudget({ category_id: catId, year_month: ym(year, mIdx), monthly_limit: amount });
+    await upsertBudget({ category_id: catId, year_month: ym(year, mIdx), monthly_limit: amount, entity_id: entityId });
     patchCell(catId, mIdx, { budget: amount });
     if (mIdx === monthIdx) refreshTotals();
   };
 
   const clearActual = async (catId: number, mIdx: number) => {
-    await deleteActual(catId, ym(year, mIdx));
+    await deleteActual(catId, ym(year, mIdx), entityId);
     await load();
     refreshTotals();
   };
 
   const fillForward = async (catId: number, mIdx: number, amount: number) => {
-    await fillForwardBudget({ category_id: catId, from_year_month: ym(year, mIdx), monthly_limit: amount });
+    await fillForwardBudget({ category_id: catId, from_year_month: ym(year, mIdx), monthly_limit: amount, entity_id: entityId });
     await load();
     refreshTotals();
   };
@@ -189,7 +221,7 @@ export default function BudgetGridPage({ kind, title, budgetLabel, actualLabel }
   const pasteBudgets = async (catId: number, text: string) => {
     const vals = parseRow(text).slice(0, 12);
     for (let i = 0; i < vals.length; i++) {
-      await upsertBudget({ category_id: catId, year_month: ym(year, i), monthly_limit: vals[i] });
+      await upsertBudget({ category_id: catId, year_month: ym(year, i), monthly_limit: vals[i], entity_id: entityId });
     }
     await load();
     refreshTotals();
@@ -197,7 +229,7 @@ export default function BudgetGridPage({ kind, title, budgetLabel, actualLabel }
 
   const pasteActuals = async (catId: number, text: string) => {
     const vals = parseRow(text).slice(0, 12);
-    await bulkActuals(vals.map((v, i) => ({ category_id: catId, year_month: ym(year, i), amount: v })));
+    await bulkActuals(vals.map((v, i) => ({ category_id: catId, year_month: ym(year, i), amount: v })), entityId);
     await load();
     refreshTotals();
   };
@@ -304,6 +336,30 @@ export default function BudgetGridPage({ kind, title, budgetLabel, actualLabel }
           </button>
         </div>
       </div>
+
+      {entities.length > 1 && (
+        <div className="flex items-center gap-2 flex-wrap">
+          {entities.map((e) => {
+            const active = e.id === entityId;
+            const color = entityColor(e);
+            return (
+              <button
+                key={e.id}
+                onClick={() => setEntityId(e.id)}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm border transition-colors ${
+                  active
+                    ? "border-transparent text-white font-medium"
+                    : "border-gray-700 text-gray-300 hover:border-gray-500"
+                }`}
+                style={active ? { backgroundColor: color } : undefined}
+              >
+                <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: color }} />
+                {e.name}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {addOpen && (
         <div className="bg-gray-800 rounded-xl p-4 border border-gray-700 flex gap-3">

@@ -103,13 +103,16 @@ export const updateSavedView = (id: number, data: { name: string; config: string
 export const deleteSavedView = (id: number) =>
   request<{}>(`/entities/views/${id}`, { method: "DELETE" });
 
+const entityParam = (entityId?: number | null) =>
+  entityId != null ? `&entity_id=${entityId}` : "";
+
 // Budgets
 export const getBudgets = () => request<Budget[]>("/budgets/");
 export const createBudget = (data: { category_id: number; monthly_limit: number }) =>
   request<Budget>("/budgets/", { method: "POST", body: JSON.stringify(data) });
-export const upsertBudget = (data: { category_id: number; year_month: string; monthly_limit: number }) =>
+export const upsertBudget = (data: { category_id: number; year_month: string; monthly_limit: number; entity_id?: number | null }) =>
   request<Budget>("/budgets/upsert", { method: "POST", body: JSON.stringify(data) });
-export const fillForwardBudget = (data: { category_id: number; from_year_month: string; monthly_limit: number }) =>
+export const fillForwardBudget = (data: { category_id: number; from_year_month: string; monthly_limit: number; entity_id?: number | null }) =>
   request<{ updated: number }>("/budgets/fill-forward", { method: "POST", body: JSON.stringify(data) });
 
 // Manual actuals / year grid
@@ -153,16 +156,18 @@ export interface YearSummary {
   ytd_through_month: number;
 }
 
-export const getActualsYear = (year: number) => request<YearGrid>(`/actuals/?year=${year}`);
-export const upsertActual = (data: { category_id: number; year_month: string; amount: number; note?: string }) =>
+export const getActualsYear = (year: number, entityId?: number | null) =>
+  request<YearGrid>(`/actuals/?year=${year}${entityParam(entityId)}`);
+export const upsertActual = (data: { category_id: number; year_month: string; amount: number; note?: string; entity_id?: number | null }) =>
   request<ActualCell>("/actuals/", { method: "POST", body: JSON.stringify(data) });
-export const bulkActuals = (entries: { category_id: number; year_month: string; amount: number }[]) =>
-  request<{ upserted: number }>("/actuals/bulk", { method: "POST", body: JSON.stringify({ entries }) });
-export const deleteActual = (categoryId: number, yearMonth: string) =>
-  request<{}>(`/actuals/${categoryId}/${yearMonth}`, { method: "DELETE" });
-export const getMonthTotals = (yearMonth: string) =>
-  request<MonthTotals>(`/actuals/month-totals?year_month=${yearMonth}`);
-export const getYearSummary = (year: number) => request<YearSummary>(`/actuals/year-summary?year=${year}`);
+export const bulkActuals = (entries: { category_id: number; year_month: string; amount: number }[], entityId?: number | null) =>
+  request<{ upserted: number }>("/actuals/bulk", { method: "POST", body: JSON.stringify({ entries, entity_id: entityId ?? null }) });
+export const deleteActual = (categoryId: number, yearMonth: string, entityId?: number | null) =>
+  request<{}>(`/actuals/${categoryId}/${yearMonth}?_=1${entityParam(entityId)}`, { method: "DELETE" });
+export const getMonthTotals = (yearMonth: string, entityId?: number | null) =>
+  request<MonthTotals>(`/actuals/month-totals?year_month=${yearMonth}${entityParam(entityId)}`);
+export const getYearSummary = (year: number, entityId?: number | null) =>
+  request<YearSummary>(`/actuals/year-summary?year=${year}${entityParam(entityId)}`);
 
 // Bills
 export const getBills = () => request<Bill[]>("/bills/");
