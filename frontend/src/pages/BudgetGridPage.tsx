@@ -56,8 +56,12 @@ export default function BudgetGridPage({ kind, title, budgetLabel, actualLabel }
   const now = new Date();
   const yearKey = `grid.${kind}.year`;
   const monthKey = `grid.${kind}.month`;
+  const carryKey = `grid.${kind}.carryAll`;
   const [year, setYear] = useState(() => readStored(yearKey, now.getFullYear()));
   const [monthIdx, setMonthIdx] = useState(() => readStored(monthKey, now.getMonth()));
+  const [carryAll, setCarryAll] = useState(
+    () => sessionStorage.getItem(carryKey) !== "false",
+  );
 
   useEffect(() => {
     sessionStorage.setItem(yearKey, String(year));
@@ -65,6 +69,9 @@ export default function BudgetGridPage({ kind, title, budgetLabel, actualLabel }
   useEffect(() => {
     sessionStorage.setItem(monthKey, String(monthIdx));
   }, [monthIdx, monthKey]);
+  useEffect(() => {
+    sessionStorage.setItem(carryKey, String(carryAll));
+  }, [carryAll, carryKey]);
   const [grid, setGrid] = useState<YearGrid | null>(null);
   const [totals, setTotals] = useState<MonthTotals | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -129,6 +136,18 @@ export default function BudgetGridPage({ kind, title, budgetLabel, actualLabel }
   };
 
   const commitActual = async (catId: number, mIdx: number, amount: number) => {
+    if (carryAll) {
+      await bulkActuals(
+        Array.from({ length: 12 }, (_, i) => ({
+          category_id: catId,
+          year_month: ym(year, i),
+          amount,
+        })),
+      );
+      await load();
+      refreshTotals();
+      return;
+    }
     const cell = await upsertActual({ category_id: catId, year_month: ym(year, mIdx), amount });
     patchCell(catId, mIdx, {
       effective: cell.effective,
@@ -140,6 +159,16 @@ export default function BudgetGridPage({ kind, title, budgetLabel, actualLabel }
   };
 
   const commitBudget = async (catId: number, mIdx: number, amount: number) => {
+    if (carryAll) {
+      await fillForwardBudget({
+        category_id: catId,
+        from_year_month: ym(year, 0),
+        monthly_limit: amount,
+      });
+      await load();
+      refreshTotals();
+      return;
+    }
     await upsertBudget({ category_id: catId, year_month: ym(year, mIdx), monthly_limit: amount });
     patchCell(catId, mIdx, { budget: amount });
     if (mIdx === monthIdx) refreshTotals();
@@ -255,6 +284,18 @@ export default function BudgetGridPage({ kind, title, budgetLabel, actualLabel }
               <option key={m} value={i}>{m}</option>
             ))}
           </select>
+          <label
+            className="flex items-center gap-2 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm cursor-pointer select-none"
+            title="When on, a value you enter is applied to all 12 months of this year"
+          >
+            <input
+              type="checkbox"
+              checked={carryAll}
+              onChange={(e) => setCarryAll(e.target.checked)}
+              className="accent-emerald-500"
+            />
+            Same every month
+          </label>
           <button
             onClick={() => setAddOpen(!addOpen)}
             className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-2 rounded-lg text-sm"
