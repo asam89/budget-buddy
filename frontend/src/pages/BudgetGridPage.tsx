@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Plus, Maximize2, Trash2, Pencil, Check, X, Copy } from "lucide-react";
 import {
   ActualCell,
@@ -67,13 +67,18 @@ export default function BudgetGridPage({ kind, title, budgetLabel, actualLabel }
   const [year, setYear] = useState(() => readStored(yearKey, now.getFullYear()));
   const [monthIdx, setMonthIdx] = useState(() => readStored(monthKey, now.getMonth()));
   const [entities, setEntities] = useState<Entity[]>([]);
+  // Capture the stored choice once at mount; the persistence effect below must
+  // not read it back after it may have written a premature "all".
+  const storedEntityRaw = useRef(sessionStorage.getItem(ENTITY_KEY));
   const [entityId, setEntityId] = useState<number | null>(() => {
-    const raw = sessionStorage.getItem(ENTITY_KEY);
+    const raw = storedEntityRaw.current;
     if (raw === "all") return null;
     const n = raw === null ? NaN : parseInt(raw, 10);
     return Number.isFinite(n) ? n : null;
   });
-  // null entityId means either "All" (explicitly chosen) or "not yet defaulted".
+  // null entityId means either "All" (explicitly chosen) or "not yet defaulted";
+  // don't persist until entities load and the default is resolved.
+  const [entityReady, setEntityReady] = useState(false);
   const [editingEntityRow, setEditingEntityRow] = useState<number | null>(null);
   const [newEntityId, setNewEntityId] = useState<number | null>(null);
 
@@ -86,17 +91,19 @@ export default function BudgetGridPage({ kind, title, budgetLabel, actualLabel }
         // explicit stored choice (a business id, or "all").
         setEntityId((cur) => {
           if (cur !== null && active.some((e) => e.id === cur)) return cur;
-          if (sessionStorage.getItem(ENTITY_KEY) === "all") return null;
+          if (storedEntityRaw.current === "all") return null;
           const def = active.find((e) => e.is_default) ?? active[0];
           return def ? def.id : null;
         });
       })
-      .catch(() => setEntities([]));
+      .catch(() => setEntities([]))
+      .finally(() => setEntityReady(true));
   }, []);
 
   useEffect(() => {
+    if (!entityReady) return;
     sessionStorage.setItem(ENTITY_KEY, entityId === null ? "all" : String(entityId));
-  }, [entityId]);
+  }, [entityId, entityReady]);
 
   useEffect(() => {
     sessionStorage.setItem(yearKey, String(year));
@@ -310,7 +317,9 @@ export default function BudgetGridPage({ kind, title, budgetLabel, actualLabel }
   // Show the business column/tags only when there's more than one entity.
   const showEntityCol = entities.length > 1;
   // The unscoped "All" view rolls up every business, so cells are read-only.
-  const readOnly = entityId === null;
+  // Only ever lock editing when there are multiple businesses AND All is the
+  // active view — a single-entity (or not-yet-loaded) user is always editable.
+  const readOnly = entityId === null && entities.length > 1;
   const colCount = showEntityCol ? 6 : 5;
   const entityById = (id: number | null) =>
     id === null ? null : entities.find((e) => e.id === id) ?? null;
