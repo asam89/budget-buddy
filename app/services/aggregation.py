@@ -131,6 +131,107 @@ def budget_for(db: Session, category_id: int, year_month: str) -> Optional[float
     return None
 
 
+def year_grid(db: Session, year: int) -> list[dict]:
+    """Batched full-year grid: every category x 12 months, in a constant
+    number of queries (no per-cell round trips).
+
+    Returns the same per-line/per-cell shape as the per-cell path so the API
+    response is byte-for-byte compatible; ``effective_actual``/``budget_for``
+    stay as the single-cell source of truth for other callers.
+    """
+    categories = db.query(Category).order_by(Category.name).all()
+    year_prefix = f"{year:04d}-"
+    year_start = date(year, 1, 1)
+    year_end = date(year, 12, 31)
+
+    # 1 query: all confirmed, non-transfer transactions in the year.
+    pos: dict[tuple[int, int], float] = {}   # (category_id, month) -> sum(amount>0)
+    negabs: dict[tuple[int, int], float] = {}  # (category_id, month) -> sum(-amount, amount<0)
+    txns = (
+        db.query(
+            Transaction.category_id,
+            Transaction.date,
+            Transaction.amount,
+        )
+        .filter(
+            Transaction.category_id.isnot(None),
+            Transaction.date >= year_start,
+            Transaction.date <= year_end,
+            Transaction.review_status == "confirmed",
+            Transaction.txn_type != "transfer",
+        )
+        .all()
+    )
+    for cat_id, txn_date, amount in txns:
+        key = (cat_id, txn_date.month)
+        if amount > 0:
+            pos[key] = pos.get(key, 0.0) + amount
+        elif amount < 0:
+            negabs[key] = negabs.get(key, 0.0) + (-amount)
+
+    # 1 query: all manual actuals for the year.
+    manuals: dict[tuple[int, str], float] = {}
+    for cat_id, ym, amount in (
+        db.query(ManualActual.category_id, ManualActual.year_month, ManualActual.amount)
+        .filter(ManualActual.year_month.like(f"{year_prefix}%"))
+        .all()
+    ):
+        manuals[(cat_id, ym)] = amount
+
+    # 1 query: all active budgets (dated in-year + every-month NULL rows).
+    dated_budgets: dict[tuple[int, str], float] = {}
+    every_month_budgets: dict[int, float] = {}
+    for cat_id, ym, limit in (
+        db.query(Budget.category_id, Budget.year_month, Budget.monthly_limit)
+        .filter(Budget.is_active == True)  # noqa: E712
+        .all()
+    ):
+        if ym is None:
+            every_month_budgets.setdefault(cat_id, limit)
+        elif ym.startswith(year_prefix):
+            dated_budgets[(cat_id, ym)] = limit
+
+    lines = []
+    for cat in categories:
+        cells = []
+        for m in range(1, 13):
+            ym = f"{year:04d}-{m:02d}"
+            txn_sum = round(
+                (negabs.get((cat.id, m), 0.0) if cat.kind == "income" else pos.get((cat.id, m), 0.0)),
+                2,
+            )
+            manual = manuals.get((cat.id, ym))
+            if manual is not None:
+                effective, source, manual_amount = round(manual, 2), "manual", round(manual, 2)
+            elif txn_sum != 0:
+                effective, source, manual_amount = txn_sum, "transactions", None
+            else:
+                effective, source, manual_amount = None, "none", None
+
+            if (cat.id, ym) in dated_budgets:
+                budget = round(dated_budgets[(cat.id, ym)], 2)
+            elif cat.id in every_month_budgets:
+                budget = round(every_month_budgets[cat.id], 2)
+            else:
+                budget = None
+
+            cells.append({
+                "year_month": ym,
+                "effective": effective,
+                "source": source,
+                "transaction_sum": txn_sum,
+                "manual_amount": manual_amount,
+                "budget": budget,
+            })
+        lines.append({
+            "category_id": cat.id,
+            "category_name": cat.name,
+            "kind": cat.kind,
+            "cells": cells,
+        })
+    return lines
+
+
 @dataclass
 class MonthTotals:
     year_month: str

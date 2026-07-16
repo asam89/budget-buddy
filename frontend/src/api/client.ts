@@ -10,6 +10,13 @@ async function request<T>(path: string, opts?: RequestInit): Promise<T> {
     credentials: "same-origin",
   });
   if (res.status === 401) {
+    // Session expired/absent: trigger the app's auth gate (App listens for
+    // this and drops to the login screen) instead of leaving pages stuck on a
+    // dead "Not authenticated" error. Skip for the auth probes themselves so
+    // the initial getMe()/authStatus() can't cause a redirect loop.
+    if (!path.startsWith("/auth")) {
+      window.dispatchEvent(new CustomEvent("auth:unauthorized"));
+    }
     throw new Error("Not authenticated");
   }
   if (!res.ok) {

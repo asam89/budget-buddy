@@ -13,10 +13,10 @@ from app.database import get_db
 from app.models import Category, ManualActual, User
 from app.schemas import ManualActualBulk, ManualActualUpsert
 from app.services.aggregation import (
-    budget_for,
     effective_actual,
     is_valid_year_month,
     month_totals,
+    year_grid,
     year_summary,
 )
 from app.utils.auth import get_current_user
@@ -42,29 +42,13 @@ def get_actuals_year(
     db: Session = Depends(get_db),
     _user: User = Depends(get_current_user),
 ):
-    """Full grid for a year: every category x 12 months with source per cell."""
-    categories = db.query(Category).order_by(Category.name).all()
-    lines = []
-    for cat in categories:
-        cells = []
-        for m in range(1, 13):
-            ym = f"{year:04d}-{m:02d}"
-            eff = effective_actual(db, cat, ym)
-            cells.append({
-                "year_month": ym,
-                "effective": eff.amount,
-                "source": eff.source,
-                "transaction_sum": eff.transaction_sum,
-                "manual_amount": eff.manual_amount,
-                "budget": budget_for(db, cat.id, ym),
-            })
-        lines.append({
-            "category_id": cat.id,
-            "category_name": cat.name,
-            "kind": cat.kind,
-            "cells": cells,
-        })
-    return {"year": year, "lines": lines}
+    """Full grid for a year: every category x 12 months with source per cell.
+
+    Batched in ``year_grid`` (a handful of queries) rather than a per-cell
+    round trip, so a large category set doesn't fan out into hundreds of
+    encrypted-SQLite queries per page load.
+    """
+    return {"year": year, "lines": year_grid(db, year)}
 
 
 @router.post("/")
