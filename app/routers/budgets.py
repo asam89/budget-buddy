@@ -1,3 +1,5 @@
+from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -5,36 +7,49 @@ from app.database import get_db
 from app.models import Budget, Category, User
 from app.schemas import BudgetCreate, BudgetFillForward, BudgetOut, BudgetUpsert
 from app.services.aggregation import is_valid_year_month
+from app.services.entity_seed import resolve_entity_id
 from app.utils.auth import get_current_user
 
 router = APIRouter(prefix="/api/budgets", tags=["budgets"])
 
 
-def _upsert_budget(db: Session, category_id: int, year_month: str, monthly_limit: float) -> Budget:
-    """Create or update the active dated budget for (category, month)."""
+def _upsert_budget(
+    db: Session, category_id: int, year_month: str, monthly_limit: float, entity_id: Optional[int]
+) -> Budget:
+    """Create or update the active dated budget for (category, month, entity)."""
     existing = (
         db.query(Budget)
         .filter(
             Budget.category_id == category_id,
             Budget.is_active == True,  # noqa: E712
             Budget.year_month == year_month,
+            Budget.entity_id == entity_id,
         )
         .first()
     )
     if existing is not None:
         existing.monthly_limit = monthly_limit
         return existing
-    budget = Budget(category_id=category_id, monthly_limit=monthly_limit, year_month=year_month)
+    budget = Budget(
+        category_id=category_id,
+        monthly_limit=monthly_limit,
+        year_month=year_month,
+        entity_id=entity_id,
+    )
     db.add(budget)
     return budget
 
 
 @router.get("/", response_model=list[BudgetOut])
 def list_budgets(
+    entity_id: Optional[int] = None,
     db: Session = Depends(get_db),
     _user: User = Depends(get_current_user),
 ):
-    return db.query(Budget).filter(Budget.is_active == True).order_by(Budget.category_id).all()
+    q = db.query(Budget).filter(Budget.is_active == True)  # noqa: E712
+    if entity_id is not None:
+        q = q.filter(Budget.entity_id == entity_id)
+    return q.order_by(Budget.category_id).all()
 
 
 @router.post("/upsert", response_model=BudgetOut)
@@ -48,7 +63,8 @@ def upsert_budget(
         raise HTTPException(status_code=422, detail="year_month must be 'YYYY-MM'")
     if db.query(Category).filter(Category.id == data.category_id).first() is None:
         raise HTTPException(status_code=404, detail="Category not found")
-    budget = _upsert_budget(db, data.category_id, data.year_month, data.monthly_limit)
+    entity_id = resolve_entity_id(db, data.entity_id)
+    budget = _upsert_budget(db, data.category_id, data.year_month, data.monthly_limit, entity_id)
     db.commit()
     db.refresh(budget)
     return budget
@@ -65,10 +81,13 @@ def fill_forward_budget(
         raise HTTPException(status_code=422, detail="from_year_month must be 'YYYY-MM'")
     if db.query(Category).filter(Category.id == data.category_id).first() is None:
         raise HTTPException(status_code=404, detail="Category not found")
+    entity_id = resolve_entity_id(db, data.entity_id)
     year, start_month = int(data.from_year_month[:4]), int(data.from_year_month[5:7])
     updated = 0
     for month in range(start_month, 13):
-        _upsert_budget(db, data.category_id, f"{year:04d}-{month:02d}", data.monthly_limit)
+        _upsert_budget(
+            db, data.category_id, f"{year:04d}-{month:02d}", data.monthly_limit, entity_id
+        )
         updated += 1
     db.commit()
     return {"updated": updated}
@@ -84,6 +103,7 @@ def create_budget(
         category_id=data.category_id,
         monthly_limit=data.monthly_limit,
         year_month=data.year_month,
+        entity_id=resolve_entity_id(db, data.entity_id),
     )
     db.add(budget)
     db.commit()
@@ -105,6 +125,8 @@ def update_budget(
     budget.category_id = data.category_id
     budget.monthly_limit = data.monthly_limit
     budget.year_month = data.year_month
+    if data.entity_id is not None:
+        budget.entity_id = data.entity_id
     db.commit()
     db.refresh(budget)
     return budget

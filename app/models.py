@@ -170,6 +170,7 @@ class Budget(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     category_id = Column(Integer, ForeignKey("categories.id"), nullable=False)
+    entity_id = Column(Integer, ForeignKey("entities.id"), nullable=True)
     monthly_limit = Column(Float, nullable=False)
     year_month = Column(String, nullable=True)
     is_active = Column(Boolean, default=True)
@@ -189,11 +190,15 @@ class ManualActual(Base):
 
     __tablename__ = "manual_actuals"
     __table_args__ = (
-        UniqueConstraint("category_id", "year_month", name="uq_manual_actual_category_month"),
+        UniqueConstraint(
+            "category_id", "year_month", "entity_id",
+            name="uq_manual_actual_category_month_entity",
+        ),
     )
 
     id = Column(Integer, primary_key=True, index=True)
     category_id = Column(Integer, ForeignKey("categories.id"), nullable=False)
+    entity_id = Column(Integer, ForeignKey("entities.id"), nullable=True)
     year_month = Column(String, nullable=False)  # "YYYY-MM"
     amount = Column(Float, nullable=False)  # >= 0
     note = Column(Text, nullable=True)

@@ -261,6 +261,7 @@ class SavedViewCreate(BaseModel):
 class BudgetOut(BaseModel):
     id: int
     category_id: int
+    entity_id: Optional[int] = None
     monthly_limit: float
     year_month: Optional[str]
     is_active: bool
@@ -272,18 +273,21 @@ class BudgetCreate(BaseModel):
     category_id: int
     monthly_limit: float
     year_month: Optional[str] = None
+    entity_id: Optional[int] = None
 
 
 class BudgetUpsert(BaseModel):
     category_id: int
     year_month: str
     monthly_limit: float = Field(ge=0)
+    entity_id: Optional[int] = None
 
 
 class BudgetFillForward(BaseModel):
     category_id: int
     from_year_month: str
     monthly_limit: float = Field(ge=0)
+    entity_id: Optional[int] = None
 
 
 # --- Manual actuals ---
@@ -292,6 +296,7 @@ class ManualActualUpsert(BaseModel):
     year_month: str
     amount: float = Field(ge=0)
     note: Optional[str] = None
+    entity_id: Optional[int] = None
 
 
 class ManualActualBulkEntry(BaseModel):
@@ -302,6 +307,7 @@ class ManualActualBulkEntry(BaseModel):
 
 class ManualActualBulk(BaseModel):
     entries: list[ManualActualBulkEntry]
+    entity_id: Optional[int] = None
 
 
 # --- Bills ---
