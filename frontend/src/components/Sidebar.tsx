@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
 import {
   LayoutDashboard, Wallet, ArrowLeftRight, Upload,
-  Receipt, AlertCircle, BarChart3, LogOut, TrendingUp,
+  Receipt, AlertCircle, BarChart3, LogOut, TrendingUp, Settings,
 } from "lucide-react";
 import { logout, getPendingReview, getNeedsCategory } from "../api/client";
 
@@ -15,6 +15,7 @@ const links = [
   { to: "/income", icon: TrendingUp, label: "Income" },
   { to: "/review", icon: AlertCircle, label: "Review" },
   { to: "/reports", icon: BarChart3, label: "Reports" },
+  { to: "/settings", icon: Settings, label: "Settings" },
 ];
 
 export default function Sidebar({ username }: { username: string }) {
