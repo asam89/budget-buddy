@@ -3,12 +3,20 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend,
 } from "recharts";
-import { getDashboard, DashboardSummary } from "../api/client";
+import {
+  getDashboard, getEntities, getEntityBreakdown,
+  DashboardSummary, Entity, EntityBreakdown,
+} from "../api/client";
+import { entityColor } from "../lib/entityColors";
 
 const COLORS = [
   "#10b981", "#3b82f6", "#f59e0b", "#ef4444", "#8b5cf6",
   "#ec4899", "#14b8a6", "#f97316", "#6366f1", "#84cc16",
 ];
+
+// Shared with the Expenses/Income grids so an entity choice carries across pages.
+const GRID_ENTITY_KEY = "grid.entity";
+const DASH_ENTITY_KEY = "dashboard.entity";
 
 function fmt(n: number) {
   return new Intl.NumberFormat("en-CA", { style: "currency", currency: "CAD" }).format(n);
@@ -20,12 +28,44 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null);
   const [months, setMonths] = useState(3);
   const [reloadKey, setReloadKey] = useState(0);
+  const [entities, setEntities] = useState<Entity[]>([]);
+  const [entityId, setEntityId] = useState<number | null>(() => {
+    const raw = sessionStorage.getItem(DASH_ENTITY_KEY);
+    if (raw === null || raw === "all") return null;
+    const n = parseInt(raw, 10);
+    return Number.isFinite(n) ? n : null;
+  });
+  const [breakdown, setBreakdown] = useState<EntityBreakdown[]>([]);
+
+  useEffect(() => {
+    getEntities().then((all) => setEntities(all.filter((e) => e.is_active)));
+  }, []);
+
+  useEffect(() => {
+    sessionStorage.setItem(DASH_ENTITY_KEY, entityId === null ? "all" : String(entityId));
+    // Propagate a concrete entity choice to the Expenses/Income grids.
+    if (entityId !== null) sessionStorage.setItem(GRID_ENTITY_KEY, String(entityId));
+  }, [entityId]);
+
+  useEffect(() => {
+    if (entityId !== null) {
+      setBreakdown([]);
+      return;
+    }
+    let cancelled = false;
+    getEntityBreakdown(months).then((b) => {
+      if (!cancelled) setBreakdown(b);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [months, entityId, reloadKey]);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    getDashboard(months)
+    getDashboard(months, entityId)
       .then((d) => {
         if (!cancelled) setData(d);
       })
@@ -38,7 +78,7 @@ export default function DashboardPage() {
     return () => {
       cancelled = true;
     };
-  }, [months, reloadKey]);
+  }, [months, entityId, reloadKey]);
 
   if (loading && !data) return <div className="text-gray-400">Loading dashboard...</div>;
 
@@ -82,6 +122,64 @@ export default function DashboardPage() {
           <option value={12}>Last 12 months</option>
         </select>
       </div>
+
+      {/* Entity switcher: All + each active entity */}
+      {entities.length > 0 && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <EntityPill
+            label="All"
+            color="#6b7280"
+            active={entityId === null}
+            onClick={() => setEntityId(null)}
+          />
+          {entities.map((e) => (
+            <EntityPill
+              key={e.id}
+              label={e.name}
+              color={entityColor(e)}
+              active={entityId === e.id}
+              onClick={() => setEntityId(e.id)}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* All view: per-entity comparison */}
+      {entityId === null && breakdown.length > 0 && (
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            {breakdown.map((b) => {
+              const color = entityColor({ id: b.entity_id, color: b.color });
+              return (
+                <button
+                  key={b.entity_id}
+                  onClick={() => setEntityId(b.entity_id)}
+                  className="text-left bg-gray-800 rounded-xl p-4 border border-gray-700 hover:border-gray-500 transition-colors"
+                  style={{ borderLeft: `4px solid ${color}` }}
+                >
+                  <p className="text-sm font-medium" style={{ color }}>{b.entity_name}</p>
+                  <p className="text-lg font-bold mt-1">{fmt(b.net)}</p>
+                  <p className="text-xs text-blue-400 mt-1">In {fmt(b.income)}</p>
+                  <p className="text-xs text-red-400">Out {fmt(b.expenses)}</p>
+                </button>
+              );
+            })}
+          </div>
+          <div className="bg-gray-800 rounded-xl p-4 border border-gray-700">
+            <h3 className="font-semibold mb-4">Income vs Expenses by Entity</h3>
+            <ResponsiveContainer width="100%" height={260}>
+              <BarChart data={breakdown}>
+                <XAxis dataKey="entity_name" tick={{ fill: "#9ca3af", fontSize: 12 }} />
+                <YAxis tick={{ fill: "#9ca3af", fontSize: 12 }} />
+                <Tooltip contentStyle={{ backgroundColor: "#1f2937", border: "1px solid #374151" }} />
+                <Legend />
+                <Bar dataKey="income" fill="#3b82f6" name="Income" />
+                <Bar dataKey="expenses" fill="#ef4444" name="Expenses" />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
 
       {/* Summary Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -200,6 +298,25 @@ export default function DashboardPage() {
         )}
       </div>
     </div>
+  );
+}
+
+function EntityPill({
+  label, color, active, onClick,
+}: { label: string; color: string; active: boolean; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm border transition-colors ${
+        active
+          ? "border-transparent text-white font-medium"
+          : "border-gray-700 text-gray-300 hover:border-gray-500"
+      }`}
+      style={active ? { backgroundColor: color } : undefined}
+    >
+      <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: color }} />
+      {label}
+    </button>
   );
 }
 
