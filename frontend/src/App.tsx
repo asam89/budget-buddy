@@ -10,6 +10,7 @@ import ExpensesPage from "./pages/ExpensesPage";
 import IncomePage from "./pages/IncomePage";
 import ReviewPage from "./pages/ReviewPage";
 import ReportsPage from "./pages/ReportsPage";
+import SettingsPage from "./pages/SettingsPage";
 import LoginPage from "./pages/LoginPage";
 import { getMe } from "./api/client";
 
@@ -66,6 +67,7 @@ function App() {
             <Route path="/budget-setup" element={<Navigate to="/expenses?action=setup" replace />} />
             <Route path="/review" element={<ReviewPage />} />
             <Route path="/reports" element={<ReportsPage />} />
+            <Route path="/settings" element={<SettingsPage />} />
             <Route path="*" element={<Navigate to="/" />} />
           </Routes>
         </main>

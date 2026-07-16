@@ -81,6 +81,18 @@ export const deleteCategory = (id: number) =>
 
 // Entities
 export const getEntities = () => request<Entity[]>("/entities/");
+export const createEntity = (data: {
+  name: string;
+  entity_type: string;
+  color?: string;
+  is_default?: boolean;
+}) => request<Entity>("/entities/", { method: "POST", body: JSON.stringify(data) });
+export const updateEntity = (
+  id: number,
+  data: { name?: string; entity_type?: string; color?: string; is_default?: boolean; is_active?: boolean },
+) => request<Entity>(`/entities/${id}`, { method: "PUT", body: JSON.stringify(data) });
+export const deactivateEntity = (id: number) =>
+  request<{}>(`/entities/${id}`, { method: "DELETE" });
 
 // Saved Views
 export const getSavedViews = () => request<SavedView[]>("/entities/views/all");
@@ -446,7 +458,11 @@ export interface Entity {
   id: number;
   name: string;
   entity_type: string;
+  color: string | null;
+  icon: string | null;
   is_default: boolean;
+  is_active: boolean;
+  notes: string | null;
   created_at: string;
 }
 
