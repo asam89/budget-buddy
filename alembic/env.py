@@ -14,6 +14,7 @@ from app.models import (  # noqa: E402, F401 — import all models so metadata i
     Institution, PlaidItem, Account, Category, ImportSource,
     Entity, Transaction, TransactionSplit, EntityRule, SavedView,
     Budget, Bill, User, ManualActual,
+    Asset, Liability, NetWorthSnapshot,
 )
 
 config = context.config

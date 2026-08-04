@@ -1,15 +1,17 @@
 from contextlib import asynccontextmanager
 from pathlib import Path
+from urllib.parse import urlparse
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 
+from app.config import get_settings
 from app.database import SessionLocal, engine, ensure_schema
 from app.routers import (
     auth, accounts, transactions, plaid, dashboard,
     categories, budgets, bills, imports, entities, reports, export, settings,
-    budget_setup, actuals, migration, insights, version,
+    budget_setup, actuals, migration, insights, version, networth,
 )
 from app.services.other_migration import silent_delete_if_empty
 from app.services.entity_seed import seed_default_entity
@@ -51,6 +53,34 @@ app.include_router(actuals.router)
 app.include_router(migration.router)
 app.include_router(insights.router)
 app.include_router(version.router)
+app.include_router(networth.router)
+
+
+SAFE_METHODS = {"GET", "HEAD", "OPTIONS", "TRACE"}
+
+
+@app.middleware("http")
+async def csrf_origin_guard(request: Request, call_next):
+    """Reject cross-origin state-changing requests as defense-in-depth on top
+    of the SameSite=Lax session cookie. Same-origin requests (Origin host ==
+    request host) and requests without an Origin header (e.g. non-browser
+    clients, top-level navigations) are allowed."""
+    if get_settings().csrf_protect and request.method not in SAFE_METHODS:
+        origin = request.headers.get("origin")
+        if origin:
+            origin_host = urlparse(origin).netloc
+            if origin_host and origin_host != request.headers.get("host"):
+                return JSONResponse(
+                    status_code=403,
+                    content={"detail": "Cross-origin request blocked"},
+                )
+    return await call_next(request)
+
+
+@app.get("/healthz", include_in_schema=False)
+async def healthz():
+    """Liveness probe for launchd/monitoring — no auth, no DB access."""
+    return {"status": "ok", "version": app.version}
 
 # Serve the React frontend
 frontend_dist = (Path(__file__).parent.parent / "frontend" / "dist").resolve()
