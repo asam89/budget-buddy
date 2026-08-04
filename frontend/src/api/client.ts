@@ -429,6 +429,102 @@ export interface UpdateCheck {
   latest_version: string;
   error: string | null;
 }
+// Net worth
+export interface Asset {
+  id: number;
+  name: string;
+  asset_class: string;
+  value: number;
+  currency: string;
+  entity_id: number | null;
+  entity_name: string | null;
+  institution: string | null;
+  notes: string | null;
+  is_active: boolean;
+  updated_at: string;
+}
+export interface Liability {
+  id: number;
+  name: string;
+  liability_class: string;
+  balance: number;
+  currency: string;
+  entity_id: number | null;
+  entity_name: string | null;
+  institution: string | null;
+  notes: string | null;
+  is_active: boolean;
+  updated_at: string;
+}
+export interface NetWorthClassBreakdown {
+  key: string;
+  label: string;
+  total: number;
+}
+export interface NetWorthEntityBreakdown {
+  entity_id: number | null;
+  entity_name: string;
+  assets: number;
+  liabilities: number;
+  net: number;
+}
+export interface NetWorthSummary {
+  total_assets: number;
+  total_liabilities: number;
+  net_worth: number;
+  assets_by_class: NetWorthClassBreakdown[];
+  liabilities_by_class: NetWorthClassBreakdown[];
+  by_entity: NetWorthEntityBreakdown[];
+}
+export interface NetWorthSnapshot {
+  id: number;
+  as_of_date: string;
+  total_assets: number;
+  total_liabilities: number;
+  net_worth: number;
+  note: string | null;
+}
+export interface AssetInput {
+  name: string;
+  asset_class: string;
+  value: number;
+  entity_id?: number | null;
+  institution?: string | null;
+  notes?: string | null;
+}
+export interface LiabilityInput {
+  name: string;
+  liability_class: string;
+  balance: number;
+  entity_id?: number | null;
+  institution?: string | null;
+  notes?: string | null;
+}
+
+export const getNetWorthSummary = () => request<NetWorthSummary>("/networth/summary");
+export const getAssets = () => request<Asset[]>("/networth/assets");
+export const createAsset = (data: AssetInput) =>
+  request<Asset>("/networth/assets", { method: "POST", body: JSON.stringify(data) });
+export const updateAsset = (id: number, data: Partial<AssetInput & { is_active: boolean }>) =>
+  request<Asset>(`/networth/assets/${id}`, { method: "PATCH", body: JSON.stringify(data) });
+export const deleteAsset = (id: number) =>
+  request<{}>(`/networth/assets/${id}`, { method: "DELETE" });
+export const getLiabilities = () => request<Liability[]>("/networth/liabilities");
+export const createLiability = (data: LiabilityInput) =>
+  request<Liability>("/networth/liabilities", { method: "POST", body: JSON.stringify(data) });
+export const updateLiability = (id: number, data: Partial<LiabilityInput & { is_active: boolean }>) =>
+  request<Liability>(`/networth/liabilities/${id}`, { method: "PATCH", body: JSON.stringify(data) });
+export const deleteLiability = (id: number) =>
+  request<{}>(`/networth/liabilities/${id}`, { method: "DELETE" });
+export const getNetWorthSnapshots = () => request<NetWorthSnapshot[]>("/networth/snapshots");
+export const recordNetWorthSnapshot = (note?: string) =>
+  request<NetWorthSnapshot>("/networth/snapshots", {
+    method: "POST",
+    body: JSON.stringify(note ? { note } : {}),
+  });
+export const deleteNetWorthSnapshot = (id: number) =>
+  request<{}>(`/networth/snapshots/${id}`, { method: "DELETE" });
+
 export const getVersion = () => request<VersionInfo>("/version");
 export const checkForUpdate = () => request<UpdateCheck>("/version/check");
 export const startUpdate = () => request<{ started: boolean }>("/version/update", { method: "POST" });
