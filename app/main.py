@@ -1,7 +1,7 @@
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
@@ -53,13 +53,21 @@ app.include_router(insights.router)
 app.include_router(version.router)
 
 # Serve the React frontend
-frontend_dist = Path(__file__).parent.parent / "frontend" / "dist"
+frontend_dist = (Path(__file__).parent.parent / "frontend" / "dist").resolve()
 if frontend_dist.exists():
     app.mount("/assets", StaticFiles(directory=frontend_dist / "assets"), name="assets")
 
     @app.get("/{full_path:path}")
     async def serve_spa(full_path: str):
-        file_path = frontend_dist / full_path
-        if file_path.exists() and file_path.is_file():
-            return FileResponse(file_path)
-        return FileResponse(frontend_dist / "index.html")
+        # API routes are handled by their routers; never fall through to the SPA
+        # (returning index.html for an unknown /api path masks 404s).
+        if full_path.startswith("api/"):
+            raise HTTPException(status_code=404, detail="Not found")
+
+        index = frontend_dist / "index.html"
+        candidate = (frontend_dist / full_path).resolve()
+        # Only serve files that resolve to somewhere inside frontend_dist —
+        # this blocks path traversal (e.g. "../../etc/passwd").
+        if candidate.is_file() and candidate.is_relative_to(frontend_dist):
+            return FileResponse(candidate)
+        return FileResponse(index)

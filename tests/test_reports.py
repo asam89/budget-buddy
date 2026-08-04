@@ -99,7 +99,12 @@ def test_entity_pnl_basic(client, db_session):
     _txn(db_session, acct, airbnb, groceries, 50, "Supplies", days_ago=1)
     db_session.commit()
 
-    resp = client.get(f"/api/reports/entity-pnl?entity_id={airbnb.id}")
+    start = date.today() - timedelta(days=10)
+    end = date.today()
+    resp = client.get(
+        f"/api/reports/entity-pnl?entity_id={airbnb.id}"
+        f"&start_date={start}&end_date={end}"
+    )
     assert resp.status_code == 200
     data = resp.json()
     assert data["entity_name"] == "Airbnb"
@@ -131,11 +136,19 @@ def test_entity_pnl_with_splits(client, db_session):
     db_session.add_all([s1, s2])
     db_session.commit()
 
-    resp = client.get(f"/api/reports/entity-pnl?entity_id={airbnb.id}")
+    start = date.today() - timedelta(days=10)
+    end = date.today()
+    resp = client.get(
+        f"/api/reports/entity-pnl?entity_id={airbnb.id}"
+        f"&start_date={start}&end_date={end}"
+    )
     data = resp.json()
     assert data["total_expenses"] == 60.0
 
-    resp = client.get(f"/api/reports/entity-pnl?entity_id={house.id}")
+    resp = client.get(
+        f"/api/reports/entity-pnl?entity_id={house.id}"
+        f"&start_date={start}&end_date={end}"
+    )
     data = resp.json()
     assert data["total_expenses"] == 140.0
 
