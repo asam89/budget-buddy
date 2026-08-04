@@ -11,6 +11,7 @@ A locally-hosted personal finance dashboard. All financial data stays on your ma
 - **Entity ledgers** — track House, Airbnb, Business etc. independently or combined; split shared expenses across entities
 - **Auto-tagging rules** — assign transactions to entities automatically based on account, name, or merchant
 - **Spending analytics** with category breakdowns, monthly trends, budget-vs-actual, and per-entity breakdowns
+- **Net worth balance sheet** — track assets (homes, businesses, investments, vehicles, cash) and liabilities (mortgages, loans, credit) with a total net-worth headline, per-class and per-entity breakdowns, and a snapshot-based net-worth trend chart
 - **Local dashboard** accessible from any device on your home network
 - **Auth gate** with bcrypt-hashed passwords and signed session cookies
 - **Database migrations** via Alembic (reversible, SQLite-compatible)
@@ -59,7 +60,7 @@ source .venv/bin/activate
 python -m pytest tests/ -v
 ```
 
-Regression tests (229 and counting) covering: dedup logic, CSV/Excel import parsing, analytics aggregation math, entity CRUD, transaction splits, rule matching, per-entity aggregation, net worth balance sheet, and schema repair.
+Regression tests (250 and counting) covering: dedup logic, CSV/Excel import parsing, analytics aggregation math, entity CRUD, transaction splits, rule matching, per-entity aggregation, net worth balance sheet, and schema repair.
 
 ## Documentation
 

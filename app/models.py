@@ -277,6 +277,91 @@ class AppSetting(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
+ASSET_CLASSES = (
+    "cash",          # chequing, savings, cash on hand
+    "investment",    # brokerage, RRSP, TFSA, crypto
+    "real_estate",   # homes, land, rental property
+    "business",      # equity in a business
+    "vehicle",       # cars, boats
+    "other",
+)
+
+LIABILITY_CLASSES = (
+    "mortgage",
+    "loan",          # auto, student, personal
+    "credit_card",
+    "line_of_credit",
+    "other",
+)
+
+
+class Asset(Base):
+    """A manually-tracked asset counting toward net worth (home, business,
+    investment account, vehicle, etc.). Value is user-entered; entity_id
+    optionally attributes it to a household/business."""
+
+    __tablename__ = "assets"
+    __table_args__ = (
+        Index("ix_assets_entity_id", "entity_id"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False)
+    asset_class = Column(String, nullable=False, default="other")  # see ASSET_CLASSES
+    value = Column(Float, nullable=False, default=0.0)
+    currency = Column(String, default="CAD")
+    entity_id = Column(Integer, ForeignKey("entities.id"), nullable=True)
+    institution = Column(String, nullable=True)
+    notes = Column(Text, nullable=True)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    entity = relationship("Entity")
+
+
+class Liability(Base):
+    """A manually-tracked liability (mortgage, loan, credit-card balance).
+    ``balance`` is the outstanding amount owed, stored non-negative."""
+
+    __tablename__ = "liabilities"
+    __table_args__ = (
+        Index("ix_liabilities_entity_id", "entity_id"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False)
+    liability_class = Column(String, nullable=False, default="other")  # see LIABILITY_CLASSES
+    balance = Column(Float, nullable=False, default=0.0)  # >= 0, amount owed
+    currency = Column(String, default="CAD")
+    entity_id = Column(Integer, ForeignKey("entities.id"), nullable=True)
+    institution = Column(String, nullable=True)
+    notes = Column(Text, nullable=True)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    entity = relationship("Entity")
+
+
+class NetWorthSnapshot(Base):
+    """A point-in-time record of total assets, liabilities and net worth.
+    Recorded on demand so the dashboard can chart net worth over time."""
+
+    __tablename__ = "net_worth_snapshots"
+    __table_args__ = (
+        Index("ix_net_worth_snapshots_as_of", "as_of_date"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    as_of_date = Column(Date, nullable=False)
+    total_assets = Column(Float, nullable=False, default=0.0)
+    total_liabilities = Column(Float, nullable=False, default=0.0)
+    net_worth = Column(Float, nullable=False, default=0.0)
+    note = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 class User(Base):
     __tablename__ = "users"
 

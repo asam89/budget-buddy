@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
 import {
   LayoutDashboard, Wallet, ArrowLeftRight, Upload,
-  Receipt, AlertCircle, BarChart3, LogOut, TrendingUp, Settings,
+  Receipt, AlertCircle, BarChart3, LogOut, TrendingUp, Settings, Scale,
 } from "lucide-react";
 import { logout, getPendingReview, getNeedsCategory } from "../api/client";
 
@@ -14,6 +14,7 @@ const links = [
   { to: "/expenses", icon: Receipt, label: "Expenses" },
   { to: "/income", icon: TrendingUp, label: "Income" },
   { to: "/review", icon: AlertCircle, label: "Review" },
+  { to: "/net-worth", icon: Scale, label: "Net Worth" },
   { to: "/reports", icon: BarChart3, label: "Reports" },
   { to: "/settings", icon: Settings, label: "Settings" },
 ];

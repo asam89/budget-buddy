@@ -384,3 +384,114 @@ class DashboardSummary(BaseModel):
     monthly_trend: list[dict]
     budget_status: list[dict]
     saved: SavedSummary
+
+
+# --- Net worth: assets, liabilities, snapshots ---
+class AssetOut(BaseModel):
+    id: int
+    name: str
+    asset_class: str
+    value: float
+    currency: str
+    entity_id: Optional[int]
+    entity_name: Optional[str] = None
+    institution: Optional[str]
+    notes: Optional[str]
+    is_active: bool
+    updated_at: datetime
+    model_config = {"from_attributes": True}
+
+
+class AssetCreate(BaseModel):
+    name: str
+    asset_class: str = "other"
+    value: float = Field(ge=0)
+    currency: str = "CAD"
+    entity_id: Optional[int] = None
+    institution: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class AssetUpdate(BaseModel):
+    name: Optional[str] = None
+    asset_class: Optional[str] = None
+    value: Optional[float] = Field(default=None, ge=0)
+    currency: Optional[str] = None
+    entity_id: Optional[int] = None
+    institution: Optional[str] = None
+    notes: Optional[str] = None
+    is_active: Optional[bool] = None
+
+
+class LiabilityOut(BaseModel):
+    id: int
+    name: str
+    liability_class: str
+    balance: float
+    currency: str
+    entity_id: Optional[int]
+    entity_name: Optional[str] = None
+    institution: Optional[str]
+    notes: Optional[str]
+    is_active: bool
+    updated_at: datetime
+    model_config = {"from_attributes": True}
+
+
+class LiabilityCreate(BaseModel):
+    name: str
+    liability_class: str = "other"
+    balance: float = Field(ge=0)
+    currency: str = "CAD"
+    entity_id: Optional[int] = None
+    institution: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class LiabilityUpdate(BaseModel):
+    name: Optional[str] = None
+    liability_class: Optional[str] = None
+    balance: Optional[float] = Field(default=None, ge=0)
+    currency: Optional[str] = None
+    entity_id: Optional[int] = None
+    institution: Optional[str] = None
+    notes: Optional[str] = None
+    is_active: Optional[bool] = None
+
+
+class NetWorthClassBreakdown(BaseModel):
+    key: str
+    label: str
+    total: float
+
+
+class NetWorthEntityBreakdown(BaseModel):
+    entity_id: Optional[int]
+    entity_name: str
+    assets: float
+    liabilities: float
+    net: float
+
+
+class NetWorthSummary(BaseModel):
+    total_assets: float
+    total_liabilities: float
+    net_worth: float
+    assets_by_class: list[NetWorthClassBreakdown]
+    liabilities_by_class: list[NetWorthClassBreakdown]
+    by_entity: list[NetWorthEntityBreakdown]
+
+
+class NetWorthSnapshotOut(BaseModel):
+    id: int
+    as_of_date: date
+    total_assets: float
+    total_liabilities: float
+    net_worth: float
+    note: Optional[str]
+    model_config = {"from_attributes": True}
+
+
+class NetWorthSnapshotCreate(BaseModel):
+    as_of_date: Optional[date] = None
+    note: Optional[str] = None
