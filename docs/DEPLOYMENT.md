@@ -143,6 +143,16 @@ To stop: `launchctl unload ~/Library/LaunchAgents/com.budgetbuddy.plist`
 - [ ] **`.env` not committed**: Verify with `git status` — `.env` is in `.gitignore`
 - [ ] **No port forwarding**: Confirm your router is NOT forwarding port 8000 to the internet
 - [ ] **Firewall**: On Mac, allow incoming connections for Python in System Preferences → Security & Privacy → Firewall. On Windows, allow through Windows Defender Firewall.
+- [ ] **HTTPS cookie**: If you front the app with TLS (reverse proxy), set `COOKIE_SECURE=true` so the session cookie is only sent over HTTPS.
+- [ ] **CSRF guard**: `CSRF_PROTECT=true` (default) rejects cross-origin state-changing requests. Only disable it if a trusted cross-origin client needs access.
+
+### Threat model
+
+Budget Buddy is designed for a trusted home LAN. The session cookie is `HttpOnly` + `SameSite=Lax`, and the app rejects cross-origin `POST`/`PUT`/`PATCH`/`DELETE` requests (`CSRF_PROTECT`). For exposure beyond a trusted LAN, front it with a TLS-terminating reverse proxy and set `COOKIE_SECURE=true`.
+
+### Health check
+
+`GET /healthz` returns `{"status": "ok", "version": "..."}` with no auth — use it for launchd/monitoring liveness probes.
 
 ---
 

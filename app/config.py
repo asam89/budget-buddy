@@ -41,6 +41,13 @@ class Settings(BaseSettings):
     host: str = "0.0.0.0"
     port: int = 8000
 
+    # Security. Set cookie_secure=True when serving over HTTPS so the session
+    # cookie is only sent on encrypted connections. csrf_protect rejects
+    # cross-origin state-changing requests (defense-in-depth on top of the
+    # SameSite=Lax cookie); leave on unless a trusted cross-origin client needs it.
+    cookie_secure: bool = False
+    csrf_protect: bool = True
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
 

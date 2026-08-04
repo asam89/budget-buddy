@@ -55,4 +55,5 @@ def set_session_cookie(response: Response, user_id: int) -> None:
         max_age=SESSION_MAX_AGE,
         httponly=True,
         samesite="lax",
+        secure=get_settings().cookie_secure,
     )

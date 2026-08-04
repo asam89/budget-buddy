@@ -60,7 +60,7 @@ source .venv/bin/activate
 python -m pytest tests/ -v
 ```
 
-Regression tests (250 and counting) covering: dedup logic, CSV/Excel import parsing, analytics aggregation math, entity CRUD, transaction splits, rule matching, per-entity aggregation, net worth balance sheet, and schema repair.
+Regression tests (255 and counting) covering: dedup logic, CSV/Excel import parsing, analytics aggregation math, entity CRUD, transaction splits, rule matching, per-entity aggregation, net worth balance sheet, and schema repair.
 
 ## Documentation
 
