@@ -10,6 +10,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Full history + an origin/main tracking ref so the version-check
+          # tests (which compare HEAD against origin/main) can run offline.
+          fetch-depth: 0
+      - name: Ensure origin/main tracking ref
+        run: git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
       - uses: actions/setup-python@v5
         with:
           python-version: "3.10"
