@@ -26,7 +26,6 @@ export default function VersionSection() {
     return () => {
       if (pollRef.current) window.clearInterval(pollRef.current);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const runCheck = async () => {

@@ -43,7 +43,7 @@ export default function OtherReassignmentModal({ onDone }: { onDone?: () => void
       .catch(() => setSummary(null));
   }, []);
 
-  const groups: OtherGroup[] = summary?.groups ?? [];
+  const groups: OtherGroup[] = useMemo(() => summary?.groups ?? [], [summary]);
 
   const setChoice = (key: string, patch: Partial<Choice>) =>
     setChoices((prev) => {

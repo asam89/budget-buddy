@@ -4,6 +4,7 @@ import os
 from sqlalchemy import create_engine, event, inspect, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
+from sqlalchemy.pool import QueuePool
 
 from app.config import get_settings
 
@@ -81,8 +82,16 @@ def _create_engine():
 
     db_url = f"sqlite+pysqlcipher://:{settings.db_passphrase}@/{db_path}"
 
+    # The pysqlcipher dialect defaults to SingletonThreadPool, which caps live
+    # connections at pool_size and closes older threads' connections out from
+    # under them once FastAPI's threadpool exceeds it ("Cannot operate on a
+    # closed database" / segfaults under concurrent requests).
     engine = create_engine(
         db_url,
+        poolclass=QueuePool,
+        pool_size=10,
+        max_overflow=20,
+        pool_pre_ping=True,
         connect_args={"check_same_thread": False},
     )
     return engine

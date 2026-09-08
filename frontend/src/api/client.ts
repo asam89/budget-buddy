@@ -64,7 +64,7 @@ export const bulkAssignEntity = (transactionIds: number[], entityId: number) =>
     body: JSON.stringify({ transaction_ids: transactionIds, entity_id: entityId }),
   });
 export const deleteTransaction = (id: number) =>
-  request<{}>(`/transactions/${id}`, { method: "DELETE" });
+  request<Record<string, never>>(`/transactions/${id}`, { method: "DELETE" });
 
 // Categories
 export const getCategories = () => request<Category[]>("/categories/");
@@ -92,7 +92,7 @@ export const updateEntity = (
   data: { name?: string; entity_type?: string; color?: string; is_default?: boolean; is_active?: boolean },
 ) => request<Entity>(`/entities/${id}`, { method: "PUT", body: JSON.stringify(data) });
 export const deactivateEntity = (id: number) =>
-  request<{}>(`/entities/${id}`, { method: "DELETE" });
+  request<Record<string, never>>(`/entities/${id}`, { method: "DELETE" });
 
 // Saved Views
 export const getSavedViews = () => request<SavedView[]>("/entities/views/all");
@@ -101,7 +101,7 @@ export const createSavedView = (data: { name: string; config: string }) =>
 export const updateSavedView = (id: number, data: { name: string; config: string }) =>
   request<SavedView>(`/entities/views/${id}`, { method: "PUT", body: JSON.stringify(data) });
 export const deleteSavedView = (id: number) =>
-  request<{}>(`/entities/views/${id}`, { method: "DELETE" });
+  request<Record<string, never>>(`/entities/views/${id}`, { method: "DELETE" });
 
 const entityParam = (entityId?: number | null) =>
   entityId != null ? `&entity_id=${entityId}` : "";
@@ -164,7 +164,7 @@ export const upsertActual = (data: { category_id: number; year_month: string; am
 export const bulkActuals = (entries: { category_id: number; year_month: string; amount: number }[], entityId?: number | null) =>
   request<{ upserted: number }>("/actuals/bulk", { method: "POST", body: JSON.stringify({ entries, entity_id: entityId ?? null }) });
 export const deleteActual = (categoryId: number, yearMonth: string, entityId?: number | null) =>
-  request<{}>(`/actuals/${categoryId}/${yearMonth}?_=1${entityParam(entityId)}`, { method: "DELETE" });
+  request<Record<string, never>>(`/actuals/${categoryId}/${yearMonth}?_=1${entityParam(entityId)}`, { method: "DELETE" });
 export const getMonthTotals = (yearMonth: string, entityId?: number | null) =>
   request<MonthTotals>(`/actuals/month-totals?year_month=${yearMonth}${entityParam(entityId)}`);
 export const getYearSummary = (year: number, entityId?: number | null) =>
@@ -508,14 +508,14 @@ export const createAsset = (data: AssetInput) =>
 export const updateAsset = (id: number, data: Partial<AssetInput & { is_active: boolean }>) =>
   request<Asset>(`/networth/assets/${id}`, { method: "PATCH", body: JSON.stringify(data) });
 export const deleteAsset = (id: number) =>
-  request<{}>(`/networth/assets/${id}`, { method: "DELETE" });
+  request<Record<string, never>>(`/networth/assets/${id}`, { method: "DELETE" });
 export const getLiabilities = () => request<Liability[]>("/networth/liabilities");
 export const createLiability = (data: LiabilityInput) =>
   request<Liability>("/networth/liabilities", { method: "POST", body: JSON.stringify(data) });
 export const updateLiability = (id: number, data: Partial<LiabilityInput & { is_active: boolean }>) =>
   request<Liability>(`/networth/liabilities/${id}`, { method: "PATCH", body: JSON.stringify(data) });
 export const deleteLiability = (id: number) =>
-  request<{}>(`/networth/liabilities/${id}`, { method: "DELETE" });
+  request<Record<string, never>>(`/networth/liabilities/${id}`, { method: "DELETE" });
 export const getNetWorthSnapshots = () => request<NetWorthSnapshot[]>("/networth/snapshots");
 export const recordNetWorthSnapshot = (note?: string) =>
   request<NetWorthSnapshot>("/networth/snapshots", {
@@ -523,7 +523,7 @@ export const recordNetWorthSnapshot = (note?: string) =>
     body: JSON.stringify(note ? { note } : {}),
   });
 export const deleteNetWorthSnapshot = (id: number) =>
-  request<{}>(`/networth/snapshots/${id}`, { method: "DELETE" });
+  request<Record<string, never>>(`/networth/snapshots/${id}`, { method: "DELETE" });
 
 export const getVersion = () => request<VersionInfo>("/version");
 export const checkForUpdate = () => request<UpdateCheck>("/version/check");
