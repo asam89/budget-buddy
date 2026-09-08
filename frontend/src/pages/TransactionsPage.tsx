@@ -162,7 +162,7 @@ export default function TransactionsPage() {
     setTimeout(() => editRef.current?.focus(), 50);
   };
 
-  const commitEdit = async () => {
+  const commitEdit = useCallback(async () => {
     if (!editingCell) return;
     const { id, field } = editingCell;
 
@@ -180,7 +180,7 @@ export default function TransactionsPage() {
       // ignore
     }
     setEditingCell(null);
-  };
+  }, [editingCell, editValue, fetchData]);
 
   const cancelEdit = () => setEditingCell(null);
 
@@ -487,7 +487,7 @@ export default function TransactionsPage() {
         },
       },
     ],
-    [editingCell, editValue, entities, categories, entityMap, categoryMap]
+    [editingCell, editValue, entities, categories, categoryMap, commitEdit]
   );
 
   const table = useReactTable({
