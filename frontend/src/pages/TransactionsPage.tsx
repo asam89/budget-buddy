@@ -103,7 +103,7 @@ export default function TransactionsPage() {
     id: number;
     field: string;
   } | null>(null);
-  const [editValue, setEditValue] = useState("");
+  const editValueRef = useRef("");
   const [viewName, setViewName] = useState("");
   const [showSaveView, setShowSaveView] = useState(false);
   const [bulkEntity, setBulkEntity] = useState("");
@@ -158,7 +158,7 @@ export default function TransactionsPage() {
   // Inline edit handlers
   const startEdit = (id: number, field: string, currentValue: string) => {
     setEditingCell({ id, field });
-    setEditValue(currentValue);
+    editValueRef.current = currentValue;
     setTimeout(() => editRef.current?.focus(), 50);
   };
 
@@ -168,9 +168,9 @@ export default function TransactionsPage() {
 
     const payload: Record<string, unknown> = {};
     if (field === "entity_id" || field === "category_id") {
-      payload[field] = editValue ? Number(editValue) : undefined;
+      payload[field] = editValueRef.current ? Number(editValueRef.current) : undefined;
     } else {
-      payload[field] = editValue;
+      payload[field] = editValueRef.current;
     }
 
     try {
@@ -180,7 +180,7 @@ export default function TransactionsPage() {
       // ignore
     }
     setEditingCell(null);
-  }, [editingCell, editValue, fetchData]);
+  }, [editingCell, fetchData]);
 
   const cancelEdit = () => setEditingCell(null);
 
@@ -282,8 +282,8 @@ export default function TransactionsPage() {
             return (
               <input
                 ref={editRef as React.RefObject<HTMLInputElement>}
-                value={editValue}
-                onChange={(e) => setEditValue(e.target.value)}
+                defaultValue={editValueRef.current}
+                onChange={(e) => { editValueRef.current = e.target.value; }}
                 onBlur={commitEdit}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") commitEdit();
@@ -319,9 +319,9 @@ export default function TransactionsPage() {
             return (
               <select
                 ref={editRef as React.RefObject<HTMLSelectElement>}
-                value={editValue}
+                defaultValue={editValueRef.current}
                 onChange={(e) => {
-                  setEditValue(e.target.value);
+                  editValueRef.current = e.target.value;
                 }}
                 onBlur={commitEdit}
                 className="bg-gray-700 border border-emerald-500 rounded px-1 py-0.5 text-sm"
@@ -361,8 +361,8 @@ export default function TransactionsPage() {
             return (
               <select
                 ref={editRef as React.RefObject<HTMLSelectElement>}
-                value={editValue}
-                onChange={(e) => setEditValue(e.target.value)}
+                defaultValue={editValueRef.current}
+                onChange={(e) => { editValueRef.current = e.target.value; }}
                 onBlur={commitEdit}
                 className="bg-gray-700 border border-emerald-500 rounded px-1 py-0.5 text-sm"
               >
@@ -463,8 +463,8 @@ export default function TransactionsPage() {
             return (
               <input
                 ref={editRef as React.RefObject<HTMLInputElement>}
-                value={editValue}
-                onChange={(e) => setEditValue(e.target.value)}
+                defaultValue={editValueRef.current}
+                onChange={(e) => { editValueRef.current = e.target.value; }}
                 onBlur={commitEdit}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") commitEdit();
@@ -487,7 +487,7 @@ export default function TransactionsPage() {
         },
       },
     ],
-    [editingCell, editValue, entities, categories, categoryMap, commitEdit]
+    [editingCell, entities, categories, categoryMap, commitEdit]
   );
 
   const table = useReactTable({
