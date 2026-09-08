@@ -311,6 +311,7 @@ def year_grid(db: Session, year: int, entity_id: Optional[int] = None) -> list[d
             "category_name": cat.name,
             "kind": cat.kind,
             "entity_id": cat.entity_id,
+            "notes": cat.notes,
             "cells": cells,
         })
     return lines

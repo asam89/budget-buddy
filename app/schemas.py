@@ -71,6 +71,7 @@ class CategoryOut(BaseModel):
     entity_id: Optional[int]
     icon: Optional[str]
     color: Optional[str]
+    notes: Optional[str] = None
     is_system: bool
     model_config = {"from_attributes": True}
 
@@ -82,12 +83,14 @@ class CategoryCreate(BaseModel):
     entity_id: Optional[int] = None
     icon: Optional[str] = None
     color: Optional[str] = None
+    notes: Optional[str] = None
 
 
 class CategoryUpdate(BaseModel):
     name: Optional[str] = None
     kind: Optional[str] = None
     entity_id: Optional[int] = None
+    notes: Optional[str] = None
 
 
 # --- Entities ---

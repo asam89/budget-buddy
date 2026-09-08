@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, Plus, Maximize2, Trash2, Pencil, Check, X, Copy } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Maximize2, Trash2, Check, X, Copy } from "lucide-react";
 import {
   ActualCell,
   ActualLine,
@@ -19,6 +19,7 @@ import {
   upsertBudget,
 } from "../api/client";
 import EditableAmountCell from "../components/budget/EditableAmountCell";
+import EditableNoteCell from "../components/budget/EditableNoteCell";
 import LineBreakdown from "../components/budget/LineBreakdown";
 import EntityBadge from "../components/EntityBadge";
 import { entityColor } from "../lib/entityColors";
@@ -257,6 +258,20 @@ export default function BudgetGridPage({ kind, title, budgetLabel, actualLabel }
     }
   };
 
+  const commitNote = async (catId: number, note: string) => {
+    await updateCategory(catId, { notes: note });
+    setGrid((g) =>
+      g
+        ? {
+            ...g,
+            lines: g.lines.map((l) =>
+              l.category_id === catId ? { ...l, notes: note || null } : l,
+            ),
+          }
+        : g,
+    );
+  };
+
   const assignLineEntity = async (catId: number, ownerId: number | null) => {
     setEditingEntityRow(null);
     try {
@@ -320,7 +335,7 @@ export default function BudgetGridPage({ kind, title, budgetLabel, actualLabel }
   // Only ever lock editing when there are multiple businesses AND All is the
   // active view — a single-entity (or not-yet-loaded) user is always editable.
   const readOnly = entityId === null && entities.length > 1;
-  const colCount = showEntityCol ? 6 : 5;
+  const colCount = showEntityCol ? 7 : 6;
   const entityById = (id: number | null) =>
     id === null ? null : entities.find((e) => e.id === id) ?? null;
 
@@ -490,6 +505,7 @@ export default function BudgetGridPage({ kind, title, budgetLabel, actualLabel }
               <th className="text-right font-medium px-4 py-3 w-40">{budgetLabel}</th>
               <th className="text-right font-medium px-4 py-3 w-40">{actualLabel}</th>
               <th className="text-right font-medium px-4 py-3 w-32">Variance</th>
+              <th className="text-left font-medium px-4 py-3 w-56">Note</th>
               <th className="px-2 py-3 w-20"></th>
             </tr>
           </thead>
@@ -531,14 +547,15 @@ export default function BudgetGridPage({ kind, title, budgetLabel, actualLabel }
                         </button>
                       </div>
                     ) : (
-                      <div className="group flex items-center gap-2">
-                        <span>{l.category_name}</span>
+                      <div className="flex items-center gap-2">
                         <button
+                          type="button"
                           onClick={() => startEdit(l.category_id, l.category_name)}
-                          className="p-1 text-gray-600 hover:text-emerald-400 opacity-0 group-hover:opacity-100 transition-opacity"
                           aria-label={`Rename ${l.category_name}`}
+                          title="Click to rename"
+                          className="text-left rounded border border-transparent px-1 -mx-1 hover:border-gray-600"
                         >
-                          <Pencil size={13} />
+                          {l.category_name}
                         </button>
                         {cell.source === "manual" && (
                           <span className="text-[10px] text-gray-500">manual</span>
@@ -613,6 +630,13 @@ export default function BudgetGridPage({ kind, title, budgetLabel, actualLabel }
                       </span>
                     )}
                   </td>
+                  <td className="px-4 py-2">
+                    <EditableNoteCell
+                      value={l.notes}
+                      ariaLabel={`${l.category_name} note`}
+                      onCommit={(note) => commitNote(l.category_id, note)}
+                    />
+                  </td>
                   <td className="px-2 py-2">
                     <div className="flex items-center justify-end gap-1">
                       <button
@@ -655,6 +679,7 @@ export default function BudgetGridPage({ kind, title, budgetLabel, actualLabel }
                 <td className={`px-4 py-3 text-right ${diff > 0 ? "text-red-400" : "text-emerald-400"}`}>
                   {fmt(diff)}
                 </td>
+                <td></td>
                 <td></td>
               </tr>
             </tfoot>
