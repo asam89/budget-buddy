@@ -73,6 +73,7 @@ class Category(Base):
     entity_id = Column(Integer, ForeignKey("entities.id"), nullable=True)
     icon = Column(String, nullable=True)
     color = Column(String, nullable=True)
+    notes = Column(Text, nullable=True)
     is_system = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 

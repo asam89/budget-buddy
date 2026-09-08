@@ -77,6 +77,7 @@ def create_category(
         entity_id=data.entity_id,
         icon=data.icon,
         color=data.color,
+        notes=(data.notes.strip() or None) if data.notes else None,
     )
     db.add(cat)
     db.commit()
@@ -122,6 +123,11 @@ def update_category(
         if data.entity_id is not None:
             _require_entity(db, data.entity_id)
         cat.entity_id = data.entity_id
+
+    # Blank clears the note, so an explicitly sent empty string is meaningful.
+    if "notes" in data.model_fields_set:
+        note = (data.notes or "").strip()
+        cat.notes = note or None
 
     db.commit()
     db.refresh(cat)
