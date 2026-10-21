@@ -80,10 +80,16 @@ def update_llm_settings(
         _set_setting(db, "llm_provider", body.provider)
 
     if body.ollama_model is not None:
-        _set_setting(db, "ollama_model", body.ollama_model)
+        model = body.ollama_model.strip()
+        if not model:
+            raise HTTPException(status_code=422, detail="Ollama model can't be empty")
+        _set_setting(db, "ollama_model", model)
 
     if body.ollama_base_url is not None:
-        _set_setting(db, "ollama_base_url", body.ollama_base_url)
+        base_url = body.ollama_base_url.strip().rstrip("/")
+        if not base_url.startswith(("http://", "https://")):
+            raise HTTPException(status_code=422, detail="Ollama URL must start with http:// or https://")
+        _set_setting(db, "ollama_base_url", base_url)
 
     db.commit()
 

@@ -219,6 +219,11 @@ export const exportFullWorkbook = () => {
 
 // LLM / model
 export const getLlmHealth = () => request<LlmHealth>("/settings/llm/health");
+export const getLlmSettings = () => request<LlmSettings>("/settings/llm");
+export const updateLlmSettings = (data: LlmSettingsUpdate) =>
+  request<LlmSettings>("/settings/llm", { method: "PUT", body: JSON.stringify(data) });
+export const getLlmModels = () => request<{ models: string[] }>("/settings/llm/models");
+export const testLlm = () => request<LlmTestResult>("/settings/llm/test", { method: "POST" });
 
 // Budget Setup (AI-assisted)
 export const analyzeBudgetFile = (file: File) => {
@@ -307,6 +312,30 @@ export const analyzeBudgetPasteStream = (
 };
 
 // Types
+export type LlmProviderName = "ollama" | "anthropic";
+
+export interface LlmSettings {
+  provider: LlmProviderName;
+  ollama_base_url: string;
+  ollama_model: string;
+  llm_timeout_seconds: number;
+  anthropic_configured: boolean;
+}
+
+export interface LlmSettingsUpdate {
+  provider?: LlmProviderName;
+  ollama_model?: string;
+  ollama_base_url?: string;
+}
+
+export interface LlmTestResult {
+  success: boolean;
+  provider: string;
+  latency_ms: number;
+  parsed_count?: number;
+  error?: string;
+}
+
 export interface LlmHealth {
   provider_name: string;
   reachable: boolean;
