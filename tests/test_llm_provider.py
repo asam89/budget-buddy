@@ -165,3 +165,23 @@ def test_db_settings_override(client, db_session):
 
     resp = client.get("/api/settings/llm")
     assert resp.json()["ollama_model"] == "custom:7b"
+
+
+def test_update_ollama_base_url_normalised_and_used(client, db_session):
+    resp = client.put("/api/settings/llm", json={"ollama_base_url": "  http://mini.local:11434/ "})
+    assert resp.status_code == 200
+    assert resp.json()["ollama_base_url"] == "http://mini.local:11434"
+
+    from app.services.ai_parser import _get_llm_provider
+    provider = _get_llm_provider(db_session)
+    assert provider._base_url == "http://mini.local:11434"
+
+
+def test_update_ollama_base_url_rejects_non_http(client, db_session):
+    resp = client.put("/api/settings/llm", json={"ollama_base_url": "localhost:11434"})
+    assert resp.status_code == 422
+
+
+def test_update_ollama_model_rejects_blank(client, db_session):
+    resp = client.put("/api/settings/llm", json={"ollama_model": "   "})
+    assert resp.status_code == 422
