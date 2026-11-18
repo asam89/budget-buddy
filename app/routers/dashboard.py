@@ -1,3 +1,4 @@
+from dataclasses import asdict
 from typing import NamedTuple, Optional
 
 from datetime import datetime, timedelta, date
@@ -7,8 +8,8 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import Account, Transaction, TransactionSplit, Budget, Category, Entity, User
-from app.schemas import DashboardSummary, SavedSummary, TransactionOut
-from app.services.aggregation import month_totals, year_summary
+from app.schemas import DashboardSummary, MonthOverviewOut, SavedSummary, TransactionOut
+from app.services.aggregation import month_overview, month_totals, year_summary
 from app.utils.auth import get_current_user
 
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
@@ -103,6 +104,7 @@ def get_dashboard_summary(
     monthly_trend = _compute_monthly_trend(db, months, entity_id)
     budget_status = _compute_budget_status(db, entity_id)
     saved = _compute_saved(db, now.date(), entity_id)
+    overview = month_overview(db, now.strftime("%Y-%m"), entity_id)
 
     recent = _recent_transactions(db, start_date, entity_id)
 
@@ -117,6 +119,7 @@ def get_dashboard_summary(
         monthly_trend=monthly_trend,
         budget_status=budget_status,
         saved=saved,
+        month=MonthOverviewOut.model_validate(asdict(overview)),
     )
 
 

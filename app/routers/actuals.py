@@ -4,6 +4,7 @@ Reconciliation and totals come from ``app.services.aggregation`` so this router
 never computes an actual on its own.
 """
 
+from dataclasses import asdict
 from datetime import datetime
 from typing import Optional
 
@@ -16,6 +17,7 @@ from app.schemas import ManualActualBulk, ManualActualUpsert
 from app.services.aggregation import (
     effective_actual,
     is_valid_year_month,
+    month_overview,
     month_totals,
     year_grid,
     year_summary,
@@ -172,6 +174,18 @@ def get_month_totals(
 ):
     _validate_ym(year_month)
     return month_totals(db, year_month, entity_id).__dict__
+
+
+@router.get("/month-overview")
+def get_month_overview(
+    year_month: str,
+    entity_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+    _user: User = Depends(get_current_user),
+):
+    """Like-for-like variance, projection and entry progress for one month."""
+    _validate_ym(year_month)
+    return asdict(month_overview(db, year_month, entity_id))
 
 
 @router.get("/year-summary")
