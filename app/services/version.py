@@ -18,6 +18,7 @@ from typing import Optional
 
 REPO_DIR = Path(__file__).resolve().parent.parent.parent
 DEPLOY_SCRIPT = REPO_DIR / "deploy.sh"
+RESTART_SCRIPT = REPO_DIR / "scripts" / "restart.sh"
 DEFAULT_BRANCH = "main"
 MAX_CHANGED_FILES = 10
 
@@ -138,3 +139,24 @@ def check_for_update(branch: str = DEFAULT_BRANCH, fetch: bool = True) -> Update
         local_version=current_version().version,
         latest_version=_latest_remote_version(branch),
     )
+
+
+# What this process is actually running, captured once at import (startup).
+# current_version() reads git now, so after a pull it reports the code on disk
+# even if the server hasn't restarted yet; comparing the two tells the UI a
+# restart is needed.
+_STARTED_AT = None
+_RUNNING: Optional[VersionInfo] = None
+
+
+def mark_started() -> None:
+    global _STARTED_AT, _RUNNING
+    from datetime import datetime, timezone
+    _STARTED_AT = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    _RUNNING = current_version()
+
+
+def running_version() -> tuple[Optional[VersionInfo], Optional[str]]:
+    if _RUNNING is None:
+        mark_started()
+    return _RUNNING, _STARTED_AT
