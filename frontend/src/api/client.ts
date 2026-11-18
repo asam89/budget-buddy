@@ -742,3 +742,38 @@ export interface BalanceItem {
   balance: number;
   currency: string;
 }
+
+// Budget grid Excel export/import
+export interface BudgetExcelChange {
+  line: string;
+  business: string;
+  month: string;
+  field: "expected" | "actual";
+  old: number | null;
+  new: number;
+}
+export interface BudgetExcelPreview {
+  year: number;
+  change_count: number;
+  changes: BudgetExcelChange[];
+  new_lines: { line: string; kind: string; business: string }[];
+  errors: string[];
+}
+export interface BudgetExcelResult {
+  year: number;
+  lines_created: number;
+  expected_written: number;
+  actual_written: number;
+  errors: string[];
+}
+export const exportBudgetExcel = (year: number, kind?: "income" | "expense") => {
+  const q = new URLSearchParams({ year: String(year), ...(kind ? { kind } : {}) });
+  window.open(`${BASE}/budget-excel/export?${q}`, "_blank");
+};
+const budgetExcelUpload = <T,>(step: "preview" | "apply", file: File) => {
+  const form = new FormData();
+  form.append("file", file);
+  return request<T>(`/budget-excel/${step}`, { method: "POST", body: form });
+};
+export const previewBudgetExcel = (file: File) => budgetExcelUpload<BudgetExcelPreview>("preview", file);
+export const applyBudgetExcel = (file: File) => budgetExcelUpload<BudgetExcelResult>("apply", file);

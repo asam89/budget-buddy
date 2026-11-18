@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, Plus, Maximize2, Trash2, Check, X, Copy } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Maximize2, Trash2, Check, X, Copy, Download, Upload } from "lucide-react";
 import {
   ActualCell,
   ActualLine,
@@ -10,6 +10,7 @@ import {
   createCategory,
   deleteActual,
   deleteCategory,
+  exportBudgetExcel,
   fillForwardBudget,
   getActualsYear,
   getEntities,
@@ -18,6 +19,7 @@ import {
   upsertActual,
   upsertBudget,
 } from "../api/client";
+import ExcelImportModal from "../components/budget/ExcelImportModal";
 import EditableAmountCell from "../components/budget/EditableAmountCell";
 import EditableNoteCell from "../components/budget/EditableNoteCell";
 import LineBreakdown from "../components/budget/LineBreakdown";
@@ -121,6 +123,7 @@ export default function BudgetGridPage({ kind, title, budgetLabel, actualLabel }
   const [newName, setNewName] = useState("");
   const [deleting, setDeleting] = useState<number | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
   const [editName, setEditName] = useState("");
 
   const load = async () => {
@@ -374,6 +377,20 @@ export default function BudgetGridPage({ kind, title, budgetLabel, actualLabel }
           >
             <Copy size={15} />
             Copy to {monthIdx >= 11 ? "next month" : MONTHS[monthIdx + 1]}
+          </button>
+          <button
+            onClick={() => exportBudgetExcel(year, kind)}
+            title={`Download ${year}'s expected and actual values for every business as an Excel file`}
+            className="flex items-center gap-2 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm hover:border-emerald-500"
+          >
+            <Download size={15} /> Export
+          </button>
+          <button
+            onClick={() => setImportOpen(true)}
+            title="Update values from an edited export"
+            className="flex items-center gap-2 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm hover:border-emerald-500"
+          >
+            <Upload size={15} /> Import
           </button>
           <button
             onClick={() => {
@@ -700,6 +717,13 @@ export default function BudgetGridPage({ kind, title, budgetLabel, actualLabel }
           onPasteBudgets={(t) => pasteBudgets(openLine.category_id, t)}
           onPasteActuals={(t) => pasteActuals(openLine.category_id, t)}
           onClose={() => setOpenCatId(null)}
+        />
+      )}
+
+      {importOpen && (
+        <ExcelImportModal
+          onClose={() => setImportOpen(false)}
+          onApplied={(y) => (y === year ? load() : setYear(y))}
         />
       )}
     </div>

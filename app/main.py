@@ -11,7 +11,7 @@ from app.database import SessionLocal, engine, ensure_schema
 from app.routers import (
     auth, accounts, transactions, plaid, dashboard,
     categories, budgets, bills, imports, entities, reports, export, settings,
-    budget_setup, actuals, migration, insights, version, networth,
+    budget_setup, actuals, migration, insights, version, networth, budget_excel,
 )
 from app.services.other_migration import silent_delete_if_empty
 from app.services.entity_seed import seed_default_entity
@@ -47,6 +47,7 @@ app.include_router(entities.router)
 app.include_router(dashboard.router)
 app.include_router(reports.router)
 app.include_router(export.router)
+app.include_router(budget_excel.router)
 app.include_router(settings.router)
 app.include_router(budget_setup.router)
 app.include_router(actuals.router)
