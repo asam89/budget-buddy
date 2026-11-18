@@ -5,7 +5,7 @@ import {
 } from "recharts";
 import {
   getDashboard, getEntities, getEntityBreakdown,
-  DashboardSummary, Entity, EntityBreakdown,
+  DashboardSummary, Entity, EntityBreakdown, MonthOverview,
 } from "../api/client";
 import { entityColor } from "../lib/entityColors";
 
@@ -181,32 +181,14 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card label="Total Balance" value={fmt(data.total_balance)} color="text-emerald-400" />
-        <Card label="Income" value={fmt(data.total_income)} color="text-blue-400" />
-        <Card label="Expenses" value={fmt(data.total_expenses)} color="text-red-400" />
-        <Card label="Net Cash Flow" value={fmt(data.net_cash_flow)} color={data.net_cash_flow >= 0 ? "text-emerald-400" : "text-red-400"} />
-      </div>
-
-      {/* Total Saved (from manual actuals + transactions via the shared aggregation) */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <SavedCard label={`Saved this month (${data.saved.year_month})`} value={data.saved.month_saved_actual} />
-        <Card
-          label="Saved this month (budget)"
-          value={fmt(data.saved.month_saved_budget)}
-          color="text-gray-300"
-        />
-        <SavedCard
-          label={`Saved YTD (Jan–month ${data.saved.ytd_through_month})`}
-          value={data.saved.ytd_saved_actual}
-        />
-        <Card
-          label="Saved full year (budget)"
-          value={fmt(data.saved.year_saved_budget)}
-          color="text-gray-300"
-        />
-      </div>
+      {/* This month, from the same numbers as the Income and Expenses pages */}
+      {data.month ? (
+        <MonthCards m={data.month} balance={data.total_balance} ytd={data.saved.ytd_saved_actual} ytdThrough={data.saved.ytd_through_month} />
+      ) : (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <Card label="Total Balance" value={fmt(data.total_balance)} color="text-emerald-400" />
+        </div>
+      )}
 
       <div className="grid lg:grid-cols-2 gap-6">
         {/* Monthly Trend */}
@@ -320,25 +302,79 @@ function EntityPill({
   );
 }
 
-function Card({ label, value, color }: { label: string; value: string; color: string }) {
+function Card({
+  label, value, color, sub, subColor = "text-gray-500",
+}: { label: string; value: string; color: string; sub?: string; subColor?: string }) {
   return (
     <div className="bg-gray-800 rounded-xl p-4 border border-gray-700">
       <p className="text-xs text-gray-400 uppercase tracking-wide">{label}</p>
       <p className={`text-xl font-bold mt-1 ${color}`}>{value}</p>
+      {sub && <p className={`text-[11px] mt-0.5 ${subColor}`}>{sub}</p>}
     </div>
   );
 }
 
-// Actual saved: negative shows as overspent (not clamped to zero).
-function SavedCard({ label, value }: { label: string; value: number }) {
-  const negative = value < 0;
+const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** The month's income, expenses, cash flow and savings, from the Income/Expenses grids. */
+function MonthCards({
+  m, balance, ytd, ytdThrough,
+}: { m: MonthOverview; balance: number; ytd: number; ytdThrough: number }) {
+  const mon = MONTH_NAMES[parseInt(m.year_month.slice(5, 7), 10) - 1];
+  const net = m.saved_so_far;
+  const missing = m.income.missing + m.expense.missing;
+  const rate = m.savings_rate;
   return (
-    <div className="bg-gray-800 rounded-xl p-4 border border-gray-700">
-      <p className="text-xs text-gray-400 uppercase tracking-wide">{label}</p>
-      <p className={`text-xl font-bold mt-1 ${negative ? "text-red-400" : "text-emerald-400"}`}>
-        {fmt(value)}
-      </p>
-      {negative && <p className="text-[11px] text-red-400/80 mt-0.5">overspent</p>}
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card label="Total Balance" value={fmt(balance)} color="text-emerald-400" sub="across linked accounts" />
+        <Card
+          label={`Income (${mon})`}
+          value={fmt(m.income.actual)}
+          color="text-blue-400"
+          sub={`of ${fmt(m.income.budget)} expected · ${m.income.entered}/${m.income.lines} lines in`}
+        />
+        <Card
+          label={`Expenses (${mon})`}
+          value={fmt(m.expense.actual)}
+          color="text-red-400"
+          sub={`of ${fmt(m.expense.budget)} budget · ${m.expense.entered}/${m.expense.lines} lines in`}
+        />
+        <Card
+          label={`Net Cash Flow (${mon})`}
+          value={fmt(net)}
+          color={net >= 0 ? "text-emerald-400" : "text-red-400"}
+          sub="income − expenses entered so far"
+        />
+      </div>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card
+          label={`Saved so far (${mon})`}
+          value={fmt(m.saved_so_far)}
+          color={m.saved_so_far >= 0 ? "text-emerald-400" : "text-red-400"}
+          sub={missing > 0 ? `${missing} line${missing === 1 ? "" : "s"} not entered yet, so this will change` : "all budgeted lines entered"}
+          subColor={missing > 0 ? "text-amber-400/90" : "text-gray-500"}
+        />
+        <Card
+          label={`Projected saved (${mon})`}
+          value={fmt(m.saved_projected)}
+          color={m.saved_projected >= 0 ? "text-emerald-400" : "text-red-400"}
+          sub="actuals where entered, budget where not"
+        />
+        <Card
+          label="Savings rate"
+          value={rate === null ? "—" : `${Math.round(rate * 100)}%`}
+          color={rate === null ? "text-gray-500" : rate >= 0 ? "text-emerald-400" : "text-red-400"}
+          sub={rate === null ? "no income entered yet" : "of this month's income, so far"}
+        />
+        <Card
+          label={`Saved YTD (Jan–${MONTH_NAMES[Math.max(0, ytdThrough - 1)]})`}
+          value={fmt(ytd)}
+          color={ytd >= 0 ? "text-emerald-400" : "text-red-400"}
+          sub="income − expenses entered this year"
+        />
+      </div>
     </div>
   );
 }
+

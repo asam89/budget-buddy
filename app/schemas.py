@@ -376,6 +376,28 @@ class SavedSummary(BaseModel):
     year_saved_budget: float
 
 
+class KindOverviewOut(BaseModel):
+    budget: float
+    actual: float
+    projected: float
+    lines: int
+    entered: int
+    missing: int
+    compared_budget: float
+    variance: float
+
+
+class MonthOverviewOut(BaseModel):
+    """This month from the Income/Expenses grids (manual actuals, else transactions)."""
+    year_month: str
+    income: KindOverviewOut
+    expense: KindOverviewOut
+    saved_so_far: float
+    saved_projected: float
+    savings_rate: Optional[float] = None
+    complete: bool
+
+
 class DashboardSummary(BaseModel):
     total_balance: float
     total_income: float
@@ -387,6 +409,7 @@ class DashboardSummary(BaseModel):
     monthly_trend: list[dict]
     budget_status: list[dict]
     saved: SavedSummary
+    month: Optional[MonthOverviewOut] = None
 
 
 # --- Net worth: assets, liabilities, snapshots ---

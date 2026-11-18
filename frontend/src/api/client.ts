@@ -171,6 +171,8 @@ export const deleteActual = (categoryId: number, yearMonth: string, entityId?: n
   request<Record<string, never>>(`/actuals/${categoryId}/${yearMonth}?_=1${entityParam(entityId)}`, { method: "DELETE" });
 export const getMonthTotals = (yearMonth: string, entityId?: number | null) =>
   request<MonthTotals>(`/actuals/month-totals?year_month=${yearMonth}${entityParam(entityId)}`);
+export const getMonthOverview = (yearMonth: string, entityId?: number | null) =>
+  request<MonthOverview>(`/actuals/month-overview?year_month=${yearMonth}${entityParam(entityId)}`);
 export const getYearSummary = (year: number, entityId?: number | null) =>
   request<YearSummary>(`/actuals/year-summary?year=${year}${entityParam(entityId)}`);
 
@@ -728,6 +730,27 @@ export interface DashboardSummary {
   monthly_trend: { month: string; income: number; expenses: number; net: number }[];
   budget_status: { category: string; budget: number; spent: number; remaining: number; percent_used: number }[];
   saved: SavedSummary;
+  month?: MonthOverview;
+}
+
+export interface KindOverview {
+  budget: number;
+  actual: number;
+  projected: number;
+  lines: number;
+  entered: number;
+  missing: number;
+  compared_budget: number;
+  variance: number;
+}
+export interface MonthOverview {
+  year_month: string;
+  income: KindOverview;
+  expense: KindOverview;
+  saved_so_far: number;
+  saved_projected: number;
+  savings_rate: number | null;
+  complete: boolean;
 }
 
 export interface SavedSummary {

@@ -434,3 +434,76 @@ def year_summary(
         expense_actual_ytd=round(expense_actual_ytd, 2),
         ytd_through_month=ytd_through,
     )
+
+
+# ---------------------------------------------------------------------------
+# Month overview: totals that stay meaningful while a month is partly entered.
+# ---------------------------------------------------------------------------
+
+@dataclass
+class KindOverview:
+    budget: float            # every line's budget for the month
+    actual: float            # actuals entered (manual, else transactions)
+    projected: float         # actual where entered, budget where not
+    lines: int               # lines with a budget or an actual this month
+    entered: int             # lines with an actual
+    missing: int             # lines with a budget but no actual yet
+    compared_budget: float   # budget of the lines that have an actual
+    variance: float          # actual - compared_budget (like-for-like only)
+
+
+@dataclass
+class MonthOverview:
+    year_month: str
+    income: KindOverview
+    expense: KindOverview
+    saved_so_far: float          # income actual - expense actual
+    saved_projected: float       # income projected - expense projected
+    savings_rate: Optional[float]  # saved_so_far / income actual, 0..1 (None without income)
+    complete: bool               # every budgeted line has an actual
+
+
+def _kind_overview(cells: list[tuple[Optional[float], Optional[float]]]) -> KindOverview:
+    budget = actual = projected = compared_budget = 0.0
+    lines = entered = missing = 0
+    for eff, bud in cells:
+        if eff is None and bud is None:
+            continue
+        lines += 1
+        budget += bud or 0.0
+        if eff is not None:
+            entered += 1
+            actual += eff
+            projected += eff
+            compared_budget += bud or 0.0
+        else:
+            missing += 1
+            projected += bud or 0.0
+    return KindOverview(
+        budget=round(budget, 2), actual=round(actual, 2), projected=round(projected, 2),
+        lines=lines, entered=entered, missing=missing,
+        compared_budget=round(compared_budget, 2),
+        variance=round(actual - compared_budget, 2),
+    )
+
+
+def month_overview(db: Session, year_month: str, entity_id: Optional[int] = None) -> MonthOverview:
+    """One month's income/expense picture from the same grid the pages show."""
+    year = int(year_month[:4])
+    by_kind: dict[str, list[tuple[Optional[float], Optional[float]]]] = {"income": [], "expense": []}
+    for line in year_grid(db, year, entity_id):
+        cell = next(c for c in line["cells"] if c["year_month"] == year_month)
+        by_kind["income" if line["kind"] == "income" else "expense"].append(
+            (cell["effective"], cell["budget"])
+        )
+    inc, exp = _kind_overview(by_kind["income"]), _kind_overview(by_kind["expense"])
+    saved = round(inc.actual - exp.actual, 2)
+    return MonthOverview(
+        year_month=year_month,
+        income=inc,
+        expense=exp,
+        saved_so_far=saved,
+        saved_projected=round(inc.projected - exp.projected, 2),
+        savings_rate=round(saved / inc.actual, 4) if inc.actual > 0 else None,
+        complete=inc.missing == 0 and exp.missing == 0,
+    )

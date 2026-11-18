@@ -4,7 +4,7 @@ import {
   ActualCell,
   ActualLine,
   Entity,
-  MonthTotals,
+  MonthOverview,
   YearGrid,
   bulkActuals,
   createCategory,
@@ -14,12 +14,13 @@ import {
   fillForwardBudget,
   getActualsYear,
   getEntities,
-  getMonthTotals,
+  getMonthOverview,
   updateCategory,
   upsertActual,
   upsertBudget,
 } from "../api/client";
 import ExcelImportModal from "../components/budget/ExcelImportModal";
+import BudgetBreakdownModal from "../components/budget/BudgetBreakdownModal";
 import { varianceColor } from "../lib/varianceColor";
 import EditableAmountCell from "../components/budget/EditableAmountCell";
 import EditableNoteCell from "../components/budget/EditableNoteCell";
@@ -116,7 +117,8 @@ export default function BudgetGridPage({ kind, title, budgetLabel, actualLabel }
     sessionStorage.setItem(monthKey, String(monthIdx));
   }, [monthIdx, monthKey]);
   const [grid, setGrid] = useState<YearGrid | null>(null);
-  const [totals, setTotals] = useState<MonthTotals | null>(null);
+  const [overview, setOverview] = useState<MonthOverview | null>(null);
+  const [breakdownOpen, setBreakdownOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [openCatId, setOpenCatId] = useState<number | null>(null);
@@ -141,9 +143,9 @@ export default function BudgetGridPage({ kind, title, budgetLabel, actualLabel }
 
   const refreshTotals = async () => {
     try {
-      setTotals(await getMonthTotals(ym(year, monthIdx), entityId));
+      setOverview(await getMonthOverview(ym(year, monthIdx), entityId));
     } catch {
-      setTotals(null);
+      setOverview(null);
     }
   };
 
@@ -339,7 +341,9 @@ export default function BudgetGridPage({ kind, title, budgetLabel, actualLabel }
   // month totals for the summary strip (this kind only)
   const budgetTotal = qualifying.reduce((s, l) => s + (l.cells[monthIdx].budget ?? 0), 0);
   const actualTotal = qualifying.reduce((s, l) => s + (l.cells[monthIdx].effective ?? 0), 0);
-  const diff = actualTotal - budgetTotal;
+  // Like-for-like: only lines that have an actual are compared with their budget.
+  const kindOv = overview ? (kind === "income" ? overview.income : overview.expense) : null;
+  const diff = kindOv?.variance ?? 0;
 
   const openLine = openCatId !== null ? lines.find((l) => l.category_id === openCatId) : undefined;
 
@@ -480,26 +484,52 @@ export default function BudgetGridPage({ kind, title, budgetLabel, actualLabel }
       )}
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-gray-800 rounded-xl p-4 border border-gray-700">
+        <button
+          onClick={() => setBreakdownOpen(true)}
+          className="text-left bg-gray-800 rounded-xl p-4 border border-gray-700 hover:border-emerald-600 transition-colors"
+          title={`See which lines make up ${MONTHS[monthIdx]}'s ${budgetLabel.toLowerCase()}`}
+        >
           <p className="text-xs text-gray-400">{budgetLabel} ({MONTHS[monthIdx]})</p>
           <p className="text-xl font-bold">{fmt(budgetTotal)}</p>
-        </div>
+          <p className="text-[11px] text-emerald-400/80 mt-0.5">See breakdown →</p>
+        </button>
         <div className="bg-gray-800 rounded-xl p-4 border border-gray-700">
           <p className="text-xs text-gray-400">{actualLabel} ({MONTHS[monthIdx]})</p>
           <p className="text-xl font-bold">{fmt(actualTotal)}</p>
+          {kindOv && kindOv.lines > 0 && (
+            <p className="text-[11px] text-gray-500 mt-0.5">
+              {kindOv.entered} of {kindOv.lines} lines entered
+            </p>
+          )}
         </div>
         <div className="bg-gray-800 rounded-xl p-4 border border-gray-700">
           <p className="text-xs text-gray-400">{kind === "income" ? "Over/Under Expected" : "Over/Under Budget"}</p>
-          <p className={`text-xl font-bold ${varianceColor(kind, diff)}`}>{fmt(diff)}</p>
+          {kindOv && kindOv.entered > 0 ? (
+            <>
+              <p className={`text-xl font-bold ${varianceColor(kind, diff)}`}>{fmt(diff)}</p>
+              <p className="text-[11px] text-gray-500 mt-0.5">
+                on the {kindOv.entered} line{kindOv.entered === 1 ? "" : "s"} entered (vs {fmt(kindOv.compared_budget)})
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="text-xl font-bold text-gray-500">No actuals yet</p>
+              <p className="text-[11px] text-gray-500 mt-0.5">Compares each line once you enter its actual</p>
+            </>
+          )}
         </div>
         <div className="bg-gray-800 rounded-xl p-4 border border-gray-700">
-          <p className="text-xs text-gray-400">Total Saved ({MONTHS[monthIdx]})</p>
-          {totals ? (
+          <p className="text-xs text-gray-400">Saved so far ({MONTHS[monthIdx]})</p>
+          {overview ? (
             <>
-              <p className={`text-xl font-bold ${totals.saved_actual < 0 ? "text-red-400" : "text-emerald-400"}`}>
-                {fmt(totals.saved_actual)}
+              <p className={`text-xl font-bold ${overview.saved_so_far < 0 ? "text-red-400" : "text-emerald-400"}`}>
+                {fmt(overview.saved_so_far)}
               </p>
-              <p className="text-[11px] text-gray-500">budget {fmt(totals.saved_budget)}</p>
+              <p className="text-[11px] text-gray-500 mt-0.5">
+                projected {fmt(overview.saved_projected)}
+                {overview.expense.missing + overview.income.missing > 0 &&
+                  ` · ${overview.expense.missing + overview.income.missing} lines not entered`}
+              </p>
             </>
           ) : (
             <p className="text-xl font-bold text-gray-500">—</p>
@@ -699,8 +729,11 @@ export default function BudgetGridPage({ kind, title, budgetLabel, actualLabel }
                 {showEntityCol && <td className="px-4 py-3"></td>}
                 <td className="px-4 py-3 text-right">{fmt(budgetTotal)}</td>
                 <td className="px-4 py-3 text-right">{fmt(actualTotal)}</td>
-                <td className={`px-4 py-3 text-right ${varianceColor(kind, diff)}`}>
-                  {fmt(diff)}
+                <td
+                  className={`px-4 py-3 text-right ${kindOv && kindOv.entered > 0 ? varianceColor(kind, diff) : "text-gray-600"}`}
+                  title="Only lines with an actual are compared"
+                >
+                  {kindOv && kindOv.entered > 0 ? fmt(diff) : "—"}
                 </td>
                 <td></td>
                 <td></td>
@@ -723,6 +756,20 @@ export default function BudgetGridPage({ kind, title, budgetLabel, actualLabel }
           onPasteBudgets={(t) => pasteBudgets(openLine.category_id, t)}
           onPasteActuals={(t) => pasteActuals(openLine.category_id, t)}
           onClose={() => setOpenCatId(null)}
+        />
+      )}
+
+      {breakdownOpen && (
+        <BudgetBreakdownModal
+          title={budgetLabel}
+          monthLabel={`${MONTHS[monthIdx]} ${year}`}
+          lines={qualifying}
+          monthIdx={monthIdx}
+          onOpenLine={(id) => {
+            setBreakdownOpen(false);
+            setOpenCatId(id);
+          }}
+          onClose={() => setBreakdownOpen(false)}
         />
       )}
 
