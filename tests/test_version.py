@@ -42,3 +42,28 @@ def test_update_log_empty_when_missing(client, monkeypatch, tmp_path):
     resp = client.get("/api/version/update/log")
     assert resp.status_code == 200
     assert resp.json()["lines"] == []
+
+
+def test_version_has_no_dirty_suffix_and_lists_changed_files(tmp_path, monkeypatch):
+    import subprocess
+    from app.services import version as version_service
+
+    def git(*a):
+        subprocess.run(["git", *a], cwd=tmp_path, check=True, capture_output=True)
+
+    git("init", "-q")
+    git("config", "user.email", "t@t")
+    git("config", "user.name", "t")
+    (tmp_path / "a.txt").write_text("1")
+    git("add", "a.txt")
+    git("commit", "-qm", "init")
+    monkeypatch.setattr(version_service, "REPO_DIR", tmp_path)
+
+    clean = version_service.current_version()
+    assert clean.dirty is False and clean.changed_files == []
+
+    (tmp_path / "a.txt").write_text("2")
+    info = version_service.current_version()
+    assert info.dirty is True
+    assert info.changed_files == ["a.txt"]
+    assert "dirty" not in info.version and info.version == clean.version

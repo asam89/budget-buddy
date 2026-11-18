@@ -9,6 +9,7 @@ import {
 } from "../api/client";
 import { ENTITY_PALETTE, entityColor } from "../lib/entityColors";
 import VersionSection from "../components/VersionSection";
+import BackupSection from "../components/BackupSection";
 import AiProviderSection from "../components/AiProviderSection";
 
 const ENTITY_TYPES = ["personal", "business", "rental", "household", "other"];
@@ -248,6 +249,8 @@ export default function SettingsPage() {
       </section>
 
       <AiProviderSection />
+
+      <BackupSection />
 
       <VersionSection />
     </div>

@@ -452,6 +452,7 @@ export interface VersionInfo {
   commit: string | null;
   commit_date: string | null;
   dirty: boolean;
+  changed_files: string[];
 }
 export interface UpdateCheck {
   available: boolean;
@@ -777,3 +778,28 @@ const budgetExcelUpload = <T,>(step: "preview" | "apply", file: File) => {
 };
 export const previewBudgetExcel = (file: File) => budgetExcelUpload<BudgetExcelPreview>("preview", file);
 export const applyBudgetExcel = (file: File) => budgetExcelUpload<BudgetExcelResult>("apply", file);
+
+// Backup
+/** Build a backup zip on the server and save it via the browser. */
+export async function downloadBackup(): Promise<string> {
+  const res = await fetch(`${BASE}/backup/download`, { credentials: "same-origin" });
+  if (res.status === 401) {
+    window.dispatchEvent(new CustomEvent("auth:unauthorized"));
+    throw new Error("Not authenticated");
+  }
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.detail || `HTTP ${res.status}`);
+  }
+  const name =
+    /filename="?([^";]+)"?/.exec(res.headers.get("content-disposition") || "")?.[1] ?? "budget-buddy-backup.zip";
+  const url = URL.createObjectURL(await res.blob());
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  return name;
+}
