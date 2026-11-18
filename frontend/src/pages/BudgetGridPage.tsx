@@ -20,6 +20,7 @@ import {
   upsertBudget,
 } from "../api/client";
 import ExcelImportModal from "../components/budget/ExcelImportModal";
+import { varianceColor } from "../lib/varianceColor";
 import EditableAmountCell from "../components/budget/EditableAmountCell";
 import EditableNoteCell from "../components/budget/EditableNoteCell";
 import LineBreakdown from "../components/budget/LineBreakdown";
@@ -203,23 +204,33 @@ export default function BudgetGridPage({ kind, title, budgetLabel, actualLabel }
 
   // Copy the selected month's budgets and manual actuals into the next month,
   // then move to it so repeated clicks chain forward (July -> Aug -> Sep).
+  // December rolls over into January of the next year.
+  const nextMonthIdx = (monthIdx + 1) % 12;
+  const nextMonthYear = monthIdx === 11 ? year + 1 : year;
+  const nextMonthLabel = monthIdx === 11 ? `${MONTHS[0]} ${year + 1}` : MONTHS[nextMonthIdx];
+
   const copyToNextMonth = async () => {
-    if (monthIdx >= 11) return;
     const from = monthIdx;
-    const to = monthIdx + 1;
+    const to = nextMonthIdx;
+    const toYear = nextMonthYear;
     setError(null);
     try {
       for (const l of qualifying) {
         const b = l.cells[from].budget;
         if (b != null) {
-          await upsertBudget({ category_id: l.category_id, year_month: ym(year, to), monthly_limit: b, entity_id: entityId });
+          await upsertBudget({ category_id: l.category_id, year_month: ym(toYear, to), monthly_limit: b, entity_id: entityId });
         }
       }
       const actualEntries = qualifying
         .filter((l) => l.cells[from].manual_amount != null)
-        .map((l) => ({ category_id: l.category_id, year_month: ym(year, to), amount: l.cells[from].manual_amount as number }));
+        .map((l) => ({ category_id: l.category_id, year_month: ym(toYear, to), amount: l.cells[from].manual_amount as number }));
       if (actualEntries.length) await bulkActuals(actualEntries, entityId);
-      await load();
+      if (toYear !== year) {
+        // Switching the year reloads the grid for it.
+        setYear(toYear);
+      } else {
+        await load();
+      }
       setMonthIdx(to);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not copy to next month");
@@ -367,16 +378,11 @@ export default function BudgetGridPage({ kind, title, budgetLabel, actualLabel }
           </select>
           <button
             onClick={copyToNextMonth}
-            disabled={monthIdx >= 11}
-            title={
-              monthIdx >= 11
-                ? "December is the last month of the year"
-                : `Copy ${MONTHS[monthIdx]}'s budgets and actuals into ${MONTHS[monthIdx + 1]}`
-            }
+            title={`Copy ${MONTHS[monthIdx]}'s budgets and actuals into ${nextMonthLabel}`}
             className="flex items-center gap-2 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm hover:border-emerald-500 disabled:opacity-40 disabled:hover:border-gray-700"
           >
             <Copy size={15} />
-            Copy to {monthIdx >= 11 ? "next month" : MONTHS[monthIdx + 1]}
+            Copy to {nextMonthLabel}
           </button>
           <button
             onClick={() => exportBudgetExcel(year, kind)}
@@ -484,7 +490,7 @@ export default function BudgetGridPage({ kind, title, budgetLabel, actualLabel }
         </div>
         <div className="bg-gray-800 rounded-xl p-4 border border-gray-700">
           <p className="text-xs text-gray-400">{kind === "income" ? "Over/Under Expected" : "Over/Under Budget"}</p>
-          <p className={`text-xl font-bold ${diff > 0 ? "text-red-400" : "text-emerald-400"}`}>{fmt(diff)}</p>
+          <p className={`text-xl font-bold ${varianceColor(kind, diff)}`}>{fmt(diff)}</p>
         </div>
         <div className="bg-gray-800 rounded-xl p-4 border border-gray-700">
           <p className="text-xs text-gray-400">Total Saved ({MONTHS[monthIdx]})</p>
@@ -642,7 +648,7 @@ export default function BudgetGridPage({ kind, title, budgetLabel, actualLabel }
                     {variance === null ? (
                       <span className="text-gray-600">—</span>
                     ) : (
-                      <span className={variance > 0 ? "text-red-400" : "text-emerald-400"}>
+                      <span className={varianceColor(kind, variance)}>
                         {fmt(variance)}
                       </span>
                     )}
@@ -693,7 +699,7 @@ export default function BudgetGridPage({ kind, title, budgetLabel, actualLabel }
                 {showEntityCol && <td className="px-4 py-3"></td>}
                 <td className="px-4 py-3 text-right">{fmt(budgetTotal)}</td>
                 <td className="px-4 py-3 text-right">{fmt(actualTotal)}</td>
-                <td className={`px-4 py-3 text-right ${diff > 0 ? "text-red-400" : "text-emerald-400"}`}>
+                <td className={`px-4 py-3 text-right ${varianceColor(kind, diff)}`}>
                   {fmt(diff)}
                 </td>
                 <td></td>

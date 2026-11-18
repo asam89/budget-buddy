@@ -1,3 +1,4 @@
+import { varianceColor } from "../../lib/varianceColor";
 import { useEffect, useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { ActualCell, ActualLine, YearGrid, getActualsYear } from "../../api/client";
@@ -126,7 +127,7 @@ export default function MonthlyTrendView({ year, monthIdx, setYear, setMonthIdx,
                     </td>
                     <td className="p-3 text-right font-medium">{fmt(r.actual)}</td>
                     <td className="p-3 text-right text-gray-400">{r.budget ? fmt(r.budget) : "—"}</td>
-                    <td className={`p-3 text-right ${variance > 0 ? "text-red-400" : "text-emerald-400"}`}>
+                    <td className={`p-3 text-right ${r.budget ? varianceColor(kind, variance) : "text-gray-600"}`}>
                       {r.budget ? fmt(variance) : "—"}
                     </td>
                     <td className="p-3 text-right text-gray-400">{(share * 100).toFixed(1)}%</td>

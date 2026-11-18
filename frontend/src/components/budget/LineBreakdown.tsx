@@ -1,3 +1,4 @@
+import { varianceColor } from "../../lib/varianceColor";
 import { useState } from "react";
 import { X, ArrowRightToLine } from "lucide-react";
 import { ActualLine, CellSource } from "../../api/client";
@@ -134,9 +135,7 @@ export default function LineBreakdown({
                     className={`px-4 py-1.5 text-right ${
                       variance === null
                         ? "text-gray-600"
-                        : variance > 0
-                        ? "text-red-400"
-                        : "text-emerald-400"
+                        : varianceColor(line.kind === "income" ? "income" : "expense", variance)
                     }`}
                   >
                     {variance === null ? "—" : fmt(variance)}
