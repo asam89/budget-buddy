@@ -20,6 +20,7 @@ import {
   upsertBudget,
 } from "../api/client";
 import ExcelImportModal from "../components/budget/ExcelImportModal";
+import { varianceColor } from "../lib/varianceColor";
 import EditableAmountCell from "../components/budget/EditableAmountCell";
 import EditableNoteCell from "../components/budget/EditableNoteCell";
 import LineBreakdown from "../components/budget/LineBreakdown";
@@ -489,7 +490,7 @@ export default function BudgetGridPage({ kind, title, budgetLabel, actualLabel }
         </div>
         <div className="bg-gray-800 rounded-xl p-4 border border-gray-700">
           <p className="text-xs text-gray-400">{kind === "income" ? "Over/Under Expected" : "Over/Under Budget"}</p>
-          <p className={`text-xl font-bold ${diff > 0 ? "text-red-400" : "text-emerald-400"}`}>{fmt(diff)}</p>
+          <p className={`text-xl font-bold ${varianceColor(kind, diff)}`}>{fmt(diff)}</p>
         </div>
         <div className="bg-gray-800 rounded-xl p-4 border border-gray-700">
           <p className="text-xs text-gray-400">Total Saved ({MONTHS[monthIdx]})</p>
@@ -647,7 +648,7 @@ export default function BudgetGridPage({ kind, title, budgetLabel, actualLabel }
                     {variance === null ? (
                       <span className="text-gray-600">—</span>
                     ) : (
-                      <span className={variance > 0 ? "text-red-400" : "text-emerald-400"}>
+                      <span className={varianceColor(kind, variance)}>
                         {fmt(variance)}
                       </span>
                     )}
@@ -698,7 +699,7 @@ export default function BudgetGridPage({ kind, title, budgetLabel, actualLabel }
                 {showEntityCol && <td className="px-4 py-3"></td>}
                 <td className="px-4 py-3 text-right">{fmt(budgetTotal)}</td>
                 <td className="px-4 py-3 text-right">{fmt(actualTotal)}</td>
-                <td className={`px-4 py-3 text-right ${diff > 0 ? "text-red-400" : "text-emerald-400"}`}>
+                <td className={`px-4 py-3 text-right ${varianceColor(kind, diff)}`}>
                   {fmt(diff)}
                 </td>
                 <td></td>
