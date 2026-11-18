@@ -10,6 +10,9 @@ startup (deploy runs the app, not Alembic):
    ``UNIQUE(category_id, year_month)`` constraint, which would block a second
    entity from having its own value for the same category+month. The rebuild
    copies every row, so it is zero-data-loss and verified by row count.
+3. Re-file amounts on business-owned lines under the owning business
+   (``line_owner.realign_all_owned_lines``), so none are stranded where the
+   owner's grid can't show them.
 """
 
 import logging
@@ -18,6 +21,7 @@ from sqlalchemy import inspect, text
 from sqlalchemy.engine import Engine
 
 from app.services.entity_seed import DEFAULT_ENTITY_NAME
+from app.services.line_owner import realign_all_owned_lines
 
 logger = logging.getLogger(__name__)
 
@@ -113,3 +117,11 @@ def migrate_entity_scoping(engine: Engine) -> None:
             ).scalar()
             if create_sql and _NEW_UQ not in create_sql:
                 _rebuild_manual_actuals(conn)
+
+        if (
+            "budgets" in tables and "manual_actuals" in tables
+            and _has_column(inspector, "categories", "entity_id")
+            and _has_column(inspector, "budgets", "entity_id")
+            and _has_column(inspector, "manual_actuals", "entity_id")
+        ):
+            realign_all_owned_lines(conn)

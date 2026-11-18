@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from app.services.line_owner import move_line_amounts
 from app.database import get_db
 from app.models import Bill, Budget, Category, Entity, ManualActual, Transaction, User
 from app.schemas import CategoryOut, CategoryCreate, CategoryUpdate
@@ -123,6 +124,8 @@ def update_category(
         if data.entity_id is not None:
             _require_entity(db, data.entity_id)
         cat.entity_id = data.entity_id
+        # Amounts follow the line to its new business (no-op for Shared).
+        move_line_amounts(db, cat.id, data.entity_id)
 
     # Blank clears the note, so an explicitly sent empty string is meaningful.
     if "notes" in data.model_fields_set:
