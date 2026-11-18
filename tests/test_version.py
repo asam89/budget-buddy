@@ -67,3 +67,37 @@ def test_version_has_no_dirty_suffix_and_lists_changed_files(tmp_path, monkeypat
     assert info.dirty is True
     assert info.changed_files == ["a.txt"]
     assert "dirty" not in info.version and info.version == clean.version
+
+
+def test_restart_needed_when_code_on_disk_differs_from_running(client, monkeypatch):
+    running = version_service.VersionInfo(available=True, version="aaaaaaa", commit="aaaaaaa")
+    on_disk = version_service.VersionInfo(available=True, version="bbbbbbb", commit="bbbbbbb")
+    monkeypatch.setattr(version_service, "running_version", lambda: (running, "2026-11-18T14:00:00+00:00"))
+    monkeypatch.setattr(version_service, "current_version", lambda: on_disk)
+    body = client.get("/api/version").json()
+    assert body["running_version"] == "aaaaaaa" and body["version"] == "bbbbbbb"
+    assert body["restart_needed"] is True and body["started_at"]
+
+    monkeypatch.setattr(version_service, "current_version", lambda: running)
+    assert client.get("/api/version").json()["restart_needed"] is False
+
+
+def test_restart_launches_the_restart_script_detached(client, monkeypatch, tmp_path):
+    calls = []
+
+    class FakePopen:
+        def __init__(self, args, **kw):
+            calls.append((args, kw))
+
+    monkeypatch.setattr(version_router.subprocess, "Popen", FakePopen)
+    monkeypatch.setattr(version_router, "RESTART_LOG", tmp_path / "restart.log")
+    resp = client.post("/api/version/restart")
+    assert resp.status_code == 200 and resp.json() == {"restarting": True}
+    args, kw = calls[0]
+    assert args[0] == "bash" and args[1].endswith("scripts/restart.sh")
+    assert kw["start_new_session"] is True
+
+
+def test_restart_rejected_without_script(client, monkeypatch, tmp_path):
+    monkeypatch.setattr(version_service, "RESTART_SCRIPT", tmp_path / "missing.sh")
+    assert client.post("/api/version/restart").status_code == 422

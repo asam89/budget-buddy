@@ -453,6 +453,10 @@ export interface VersionInfo {
   commit_date: string | null;
   dirty: boolean;
   changed_files: string[];
+  running_version: string;
+  running_commit: string | null;
+  started_at: string | null;
+  restart_needed: boolean;
 }
 export interface UpdateCheck {
   available: boolean;
@@ -562,6 +566,7 @@ export const deleteNetWorthSnapshot = (id: number) =>
 export const getVersion = () => request<VersionInfo>("/version");
 export const checkForUpdate = () => request<UpdateCheck>("/version/check");
 export const startUpdate = () => request<{ started: boolean }>("/version/update", { method: "POST" });
+export const restartApp = () => request<{ restarting: boolean }>("/version/restart", { method: "POST" });
 export const getUpdateLog = () => request<{ lines: string[] }>("/version/update/log");
 
 export interface BudgetCommitResult {

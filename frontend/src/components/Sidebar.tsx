@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Wallet, ArrowLeftRight, Upload,
   Receipt, AlertCircle, BarChart3, LogOut, TrendingUp, Settings, Scale,
 } from "lucide-react";
-import { logout, getPendingReview, getNeedsCategory } from "../api/client";
+import { logout, getPendingReview, getNeedsCategory, getVersion, VersionInfo } from "../api/client";
 
 const links = [
   { to: "/", icon: LayoutDashboard, label: "Dashboard" },
@@ -21,11 +21,13 @@ const links = [
 
 export default function Sidebar({ username }: { username: string }) {
   const [reviewCount, setReviewCount] = useState(0);
+  const [version, setVersion] = useState<VersionInfo | null>(null);
 
   useEffect(() => {
     Promise.all([getPendingReview(), getNeedsCategory()])
       .then(([pending, needs]) => setReviewCount(pending.length + needs.length))
       .catch(() => setReviewCount(0));
+    getVersion().then(setVersion).catch(() => setVersion(null));
   }, []);
 
   const handleLogout = async () => {
@@ -76,6 +78,24 @@ export default function Sidebar({ username }: { username: string }) {
           <LogOut size={18} />
           Logout
         </button>
+        {version?.available && (
+          <NavLink
+            to="/settings"
+            className="flex items-center gap-1.5 px-3 pt-1.5 pb-0.5 text-[11px] font-mono text-gray-500 hover:text-gray-300"
+            title={
+              `Running ${version.running_version}` +
+              (version.started_at ? ` since ${new Date(version.started_at).toLocaleString()}` : "") +
+              (version.restart_needed ? `\nVersion ${version.version} is installed: restart to finish updating` : "") +
+              (version.dirty ? "\nModified locally" : "")
+            }
+          >
+            {(version.restart_needed || version.dirty) && (
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" aria-hidden />
+            )}
+            <span>v {version.running_version}</span>
+            {version.restart_needed && <span className="text-amber-400 font-sans">· restart needed</span>}
+          </NavLink>
+        )}
       </div>
     </aside>
   );
