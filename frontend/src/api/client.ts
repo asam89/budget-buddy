@@ -452,6 +452,7 @@ export interface VersionInfo {
   commit: string | null;
   commit_date: string | null;
   dirty: boolean;
+  changed_files: string[];
 }
 export interface UpdateCheck {
   available: boolean;

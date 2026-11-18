@@ -12,13 +12,14 @@ than raising, so the endpoint and UI can hide the feature.
 from __future__ import annotations
 
 import subprocess
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
 REPO_DIR = Path(__file__).resolve().parent.parent.parent
 DEPLOY_SCRIPT = REPO_DIR / "deploy.sh"
 DEFAULT_BRANCH = "main"
+MAX_CHANGED_FILES = 10
 
 
 @dataclass
@@ -28,6 +29,7 @@ class VersionInfo:
     commit: Optional[str] = None
     commit_date: Optional[str] = None
     dirty: bool = False
+    changed_files: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -66,17 +68,22 @@ def current_version() -> VersionInfo:
     if not is_git_checkout():
         return VersionInfo(available=False, version="unknown")
 
-    described = _git("describe", "--tags", "--always", "--dirty")
+    # No --dirty suffix: uncommitted changes are reported separately (dirty /
+    # changed_files) so the version string stays a clean tag or commit.
+    described = _git("describe", "--tags", "--always")
     commit = _git("rev-parse", "--short", "HEAD")
     commit_date = _git("show", "-s", "--format=%cI", "HEAD")
-    dirty = bool(_git("status", "--porcelain"))
+    status = _git("status", "--porcelain") or ""
+    # "XY path" lines; _git() strips output, so split rather than slice.
+    changed = [line.split(maxsplit=1)[1] for line in status.splitlines() if len(line.split()) > 1]
 
     return VersionInfo(
         available=True,
         version=described or commit or "unknown",
         commit=commit,
         commit_date=commit_date,
-        dirty=dirty,
+        dirty=bool(changed),
+        changed_files=changed[:MAX_CHANGED_FILES],
     )
 
 

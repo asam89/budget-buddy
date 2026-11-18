@@ -19,6 +19,9 @@ HOST="${BUDGET_BUDDY_HOST:-0.0.0.0}"
 PORT="${BUDGET_BUDDY_PORT:-8000}"
 
 echo "==> Pulling latest code (main)"
+# Older builds rewrote this tracked file; discard that so it can't block the
+# pull or show the install as modified. Builds now write it to node_modules.
+git checkout -- frontend/tsconfig.tsbuildinfo 2>/dev/null || true
 git pull origin main
 
 echo "==> Activating virtualenv"

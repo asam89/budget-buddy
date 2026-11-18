@@ -29,6 +29,7 @@ class VersionResponse(BaseModel):
     commit: Optional[str] = None
     commit_date: Optional[str] = None
     dirty: bool = False
+    changed_files: list[str] = []
 
 
 class UpdateCheckResponse(BaseModel):
@@ -50,6 +51,7 @@ def get_version(_user: User = Depends(get_current_user)):
         commit=info.commit,
         commit_date=info.commit_date,
         dirty=info.dirty,
+        changed_files=info.changed_files,
     )
 
 

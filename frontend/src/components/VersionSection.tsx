@@ -92,7 +92,15 @@ export default function VersionSection() {
             <span className="text-gray-400">Installed: </span>
             <span className="font-mono font-medium">{version?.version ?? "…"}</span>
             {version?.dirty && (
-              <span className="ml-2 text-xs text-amber-400">local changes</span>
+              <span
+                className="ml-2 text-xs text-amber-400 cursor-help"
+                title={
+                  "Files on this machine differ from the installed version:\n" +
+                  version.changed_files.join("\n")
+                }
+              >
+                modified locally
+              </span>
             )}
             {version?.commit_date && (
               <span className="ml-2 text-xs text-gray-500">
