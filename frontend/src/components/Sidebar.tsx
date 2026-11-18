@@ -36,8 +36,13 @@ export default function Sidebar({ username }: { username: string }) {
   return (
     <aside className="w-56 bg-gray-800 border-r border-gray-700 flex flex-col">
       <div className="p-4 border-b border-gray-700">
-        <h1 className="text-xl font-bold text-emerald-400">Budget Buddy</h1>
-        <p className="text-xs text-gray-400 mt-1">{username}</p>
+        <div className="flex items-center gap-2.5">
+          <img src="/favicon.svg" alt="" className="w-9 h-9 shrink-0" />
+          <div className="min-w-0">
+            <h1 className="text-xl font-bold text-emerald-400 leading-tight">Budget Buddy</h1>
+            <p className="text-xs text-gray-400 truncate">{username}</p>
+          </div>
+        </div>
       </div>
       <nav className="flex-1 p-2 space-y-1">
         {links.map(({ to, icon: Icon, label }) => (

@@ -7,7 +7,7 @@ import {
   getNetWorthSummary, getAssets, getLiabilities, getNetWorthSnapshots,
   createAsset, updateAsset, deleteAsset,
   createLiability, updateLiability, deleteLiability,
-  recordNetWorthSnapshot, getEntities,
+  recordNetWorthSnapshot, deleteNetWorthSnapshot, getEntities,
   Asset, Liability, NetWorthSummary, NetWorthSnapshot, Entity,
 } from "../api/client";
 
@@ -27,6 +27,9 @@ const LIABILITY_CLASSES = [
   { key: "other", label: "Other", icon: CircleDollarSign },
 ];
 
+const fmtDate = (iso: string) =>
+  new Date(`${iso}T00:00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+
 const fmt = (n: number) =>
   new Intl.NumberFormat("en-CA", { style: "currency", currency: "CAD", maximumFractionDigits: 0 }).format(n);
 
@@ -43,6 +46,8 @@ export default function NetWorthPage() {
   const [entities, setEntities] = useState<Entity[]>([]);
   const [edit, setEdit] = useState<EditState>(null);
   const [saving, setSaving] = useState(false);
+  const [snapBusy, setSnapBusy] = useState(false);
+  const [snapMsg, setSnapMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   const reload = useCallback(() => {
     Promise.all([
@@ -61,7 +66,26 @@ export default function NetWorthPage() {
   }, [reload]);
 
   const handleSnapshot = async () => {
-    await recordNetWorthSnapshot();
+    setSnapBusy(true);
+    setSnapMsg(null);
+    try {
+      const snap = await recordNetWorthSnapshot();
+      const replaced = snapshots.some((s) => s.as_of_date === snap.as_of_date);
+      setSnapMsg({
+        ok: true,
+        text: `${replaced ? "Updated" : "Saved"} snapshot for ${fmtDate(snap.as_of_date)}: net worth ${fmt(snap.net_worth)}`,
+      });
+      reload();
+    } catch (e) {
+      setSnapMsg({ ok: false, text: `Couldn't record a snapshot: ${e instanceof Error ? e.message : String(e)}` });
+    } finally {
+      setSnapBusy(false);
+    }
+  };
+
+  const handleDeleteSnapshot = async (id: number) => {
+    if (!window.confirm("Delete this snapshot from the trend?")) return;
+    await deleteNetWorthSnapshot(id);
     reload();
   };
 
@@ -84,10 +108,11 @@ export default function NetWorthPage() {
         <div className="flex gap-2">
           <button
             onClick={handleSnapshot}
-            className="flex items-center gap-2 bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg text-sm"
-            title="Save today's totals to the trend chart"
+            disabled={snapBusy}
+            className="flex items-center gap-2 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm"
+            title="Save today's totals to the trend chart (recording again today replaces today's snapshot)"
           >
-            <Camera size={16} /> Record snapshot
+            <Camera size={16} /> {snapBusy ? "Recording…" : "Record snapshot"}
           </button>
           <button
             onClick={() => setEdit({ kind: "asset", row: null })}
@@ -124,6 +149,22 @@ export default function NetWorthPage() {
         </div>
       )}
 
+      {snapMsg && (
+        <div
+          role="status"
+          className={`flex items-center justify-between gap-3 rounded-lg border px-4 py-2.5 text-sm ${
+            snapMsg.ok
+              ? "border-emerald-700 bg-emerald-900/30 text-emerald-300"
+              : "border-red-700 bg-red-900/30 text-red-300"
+          }`}
+        >
+          <span>{snapMsg.text}</span>
+          <button onClick={() => setSnapMsg(null)} className="text-gray-400 hover:text-white" aria-label="Dismiss">
+            ×
+          </button>
+        </div>
+      )}
+
       {/* Trend chart */}
       <div className="bg-gray-800 rounded-xl p-5 border border-gray-700">
         <h3 className="font-semibold mb-4">Net Worth Over Time</h3>
@@ -148,9 +189,57 @@ export default function NetWorthPage() {
           </ResponsiveContainer>
         ) : (
           <p className="text-gray-500 text-center py-10 text-sm">
-            Record at least two snapshots to see your net worth trend. Click “Record snapshot” after
-            updating your balances.
+            {snapshots.length === 1 ? (
+              <>
+                One snapshot so far ({fmtDate(snapshots[0].as_of_date)}: {fmt(snapshots[0].net_worth)}).
+                The trend appears once you record another on a later day. Recording again today replaces
+                today's snapshot.
+              </>
+            ) : (
+              <>
+                Click “Record snapshot” after updating your balances. The trend appears once you have
+                snapshots from two different days.
+              </>
+            )}
           </p>
+        )}
+
+        {snapshots.length > 0 && (
+          <div className="mt-4 border-t border-gray-700 pt-3">
+            <h4 className="text-xs uppercase tracking-wide text-gray-400 mb-2">Snapshots</h4>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-gray-400">
+                    <th className="py-1 pr-3 font-medium">Date</th>
+                    <th className="py-1 pr-3 font-medium text-right">Assets</th>
+                    <th className="py-1 pr-3 font-medium text-right">Liabilities</th>
+                    <th className="py-1 pr-3 font-medium text-right">Net worth</th>
+                    <th className="py-1 w-8" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {[...snapshots].reverse().map((s) => (
+                    <tr key={s.id} className="border-t border-gray-700/50">
+                      <td className="py-1.5 pr-3">{fmtDate(s.as_of_date)}</td>
+                      <td className="py-1.5 pr-3 text-right tabular-nums text-emerald-400">{fmt(s.total_assets)}</td>
+                      <td className="py-1.5 pr-3 text-right tabular-nums text-rose-400">{fmt(s.total_liabilities)}</td>
+                      <td className="py-1.5 pr-3 text-right tabular-nums font-medium">{fmt(s.net_worth)}</td>
+                      <td className="py-1.5 text-right">
+                        <button
+                          onClick={() => handleDeleteSnapshot(s.id)}
+                          className="text-gray-500 hover:text-rose-400"
+                          aria-label={`Delete snapshot for ${fmtDate(s.as_of_date)}`}
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
         )}
       </div>
 
