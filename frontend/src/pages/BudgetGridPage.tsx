@@ -203,23 +203,33 @@ export default function BudgetGridPage({ kind, title, budgetLabel, actualLabel }
 
   // Copy the selected month's budgets and manual actuals into the next month,
   // then move to it so repeated clicks chain forward (July -> Aug -> Sep).
+  // December rolls over into January of the next year.
+  const nextMonthIdx = (monthIdx + 1) % 12;
+  const nextMonthYear = monthIdx === 11 ? year + 1 : year;
+  const nextMonthLabel = monthIdx === 11 ? `${MONTHS[0]} ${year + 1}` : MONTHS[nextMonthIdx];
+
   const copyToNextMonth = async () => {
-    if (monthIdx >= 11) return;
     const from = monthIdx;
-    const to = monthIdx + 1;
+    const to = nextMonthIdx;
+    const toYear = nextMonthYear;
     setError(null);
     try {
       for (const l of qualifying) {
         const b = l.cells[from].budget;
         if (b != null) {
-          await upsertBudget({ category_id: l.category_id, year_month: ym(year, to), monthly_limit: b, entity_id: entityId });
+          await upsertBudget({ category_id: l.category_id, year_month: ym(toYear, to), monthly_limit: b, entity_id: entityId });
         }
       }
       const actualEntries = qualifying
         .filter((l) => l.cells[from].manual_amount != null)
-        .map((l) => ({ category_id: l.category_id, year_month: ym(year, to), amount: l.cells[from].manual_amount as number }));
+        .map((l) => ({ category_id: l.category_id, year_month: ym(toYear, to), amount: l.cells[from].manual_amount as number }));
       if (actualEntries.length) await bulkActuals(actualEntries, entityId);
-      await load();
+      if (toYear !== year) {
+        // Switching the year reloads the grid for it.
+        setYear(toYear);
+      } else {
+        await load();
+      }
       setMonthIdx(to);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not copy to next month");
@@ -367,16 +377,11 @@ export default function BudgetGridPage({ kind, title, budgetLabel, actualLabel }
           </select>
           <button
             onClick={copyToNextMonth}
-            disabled={monthIdx >= 11}
-            title={
-              monthIdx >= 11
-                ? "December is the last month of the year"
-                : `Copy ${MONTHS[monthIdx]}'s budgets and actuals into ${MONTHS[monthIdx + 1]}`
-            }
+            title={`Copy ${MONTHS[monthIdx]}'s budgets and actuals into ${nextMonthLabel}`}
             className="flex items-center gap-2 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm hover:border-emerald-500 disabled:opacity-40 disabled:hover:border-gray-700"
           >
             <Copy size={15} />
-            Copy to {monthIdx >= 11 ? "next month" : MONTHS[monthIdx + 1]}
+            Copy to {nextMonthLabel}
           </button>
           <button
             onClick={() => exportBudgetExcel(year, kind)}
