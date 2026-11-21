@@ -13,10 +13,11 @@ import ReportsPage from "./pages/ReportsPage";
 import NetWorthPage from "./pages/NetWorthPage";
 import SettingsPage from "./pages/SettingsPage";
 import LoginPage from "./pages/LoginPage";
-import { getMe } from "./api/client";
+import LinkPage from "./pages/LinkPage";
+import { getMe, Me } from "./api/client";
 
 function App() {
-  const [user, setUser] = useState<{ id: number; username: string } | null>(null);
+  const [user, setUser] = useState<Me | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -44,6 +45,8 @@ function App() {
     return (
       <BrowserRouter>
         <Routes>
+          <Route path="/invite/:token" element={<LinkPage onDone={setUser} />} />
+          <Route path="/reset/:token" element={<LinkPage onDone={setUser} />} />
           <Route path="*" element={<LoginPage onLogin={setUser} />} />
         </Routes>
       </BrowserRouter>
@@ -69,7 +72,7 @@ function App() {
             <Route path="/review" element={<ReviewPage />} />
             <Route path="/net-worth" element={<NetWorthPage />} />
             <Route path="/reports" element={<ReportsPage />} />
-            <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/settings" element={<SettingsPage me={user} />} />
             <Route path="*" element={<Navigate to="/" />} />
           </Routes>
         </main>

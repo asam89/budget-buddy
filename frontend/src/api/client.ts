@@ -34,7 +34,26 @@ export const setup = (username: string, password: string) =>
 export const login = (username: string, password: string) =>
   request("/auth/login", { method: "POST", body: JSON.stringify({ username, password }) });
 export const logout = () => request("/auth/logout", { method: "POST" });
-export const getMe = () => request<{ id: number; username: string }>("/auth/me");
+export interface Me { id: number; username: string; is_admin?: boolean }
+export const getMe = () => request<Me>("/auth/me");
+export const changePassword = (current_password: string, new_password: string) =>
+  request<Me>("/auth/password", { method: "POST", body: JSON.stringify({ current_password, new_password }) });
+export interface LinkInfo { valid: boolean; purpose?: "invite" | "reset"; username?: string | null; expires_at?: string }
+export const getLinkInfo = (token: string) => request<LinkInfo>(`/auth/link/${encodeURIComponent(token)}`);
+export const redeemLink = (token: string, password: string, username?: string) =>
+  request<Me>(`/auth/link/${encodeURIComponent(token)}`, { method: "POST", body: JSON.stringify({ password, username }) });
+
+// Accounts (admin)
+export interface AccountRow { id: number; username: string; is_admin: boolean; is_active: boolean; created_at: string | null; is_you: boolean }
+export interface InviteRow { id: number; note: string | null; make_admin: boolean; created_at: string | null; expires_at: string | null }
+export const listAccounts = () => request<{ users: AccountRow[]; invites: InviteRow[] }>("/users");
+export const createInvite = (note: string, make_admin: boolean) =>
+  request<{ id: number; path: string; expires_at: string }>("/users/invites", { method: "POST", body: JSON.stringify({ note, make_admin }) });
+export const revokeInvite = (id: number) => request<Record<string, never>>(`/users/invites/${id}`, { method: "DELETE" });
+export const createResetLink = (userId: number) =>
+  request<{ path: string; expires_at: string; username: string }>(`/users/${userId}/reset-link`, { method: "POST" });
+export const updateAccount = (userId: number, patch: { is_active?: boolean; is_admin?: boolean }) =>
+  request<AccountRow>(`/users/${userId}`, { method: "PATCH", body: JSON.stringify(patch) });
 
 // Accounts
 export const getAccounts = () => request<Account[]>("/accounts/");

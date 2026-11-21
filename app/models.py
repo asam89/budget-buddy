@@ -370,4 +370,26 @@ class User(Base):
     username = Column(String, unique=True, nullable=False)
     password_hash = Column(String, nullable=False)
     is_active = Column(Boolean, default=True)
+    is_admin = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class UserToken(Base):
+    """A one-time link: an invite to create an account, or a password reset.
+
+    Only a SHA-256 hash of the token is stored; the raw token is shown once,
+    in the link, to the admin who created it.
+    """
+
+    __tablename__ = "user_tokens"
+
+    id = Column(Integer, primary_key=True, index=True)
+    token_hash = Column(String, unique=True, nullable=False)
+    purpose = Column(String, nullable=False)  # 'invite' | 'reset'
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)  # reset target
+    make_admin = Column(Boolean, default=False)  # invite: new account is an admin
+    note = Column(String, nullable=True)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    expires_at = Column(DateTime, nullable=False)
+    used_at = Column(DateTime, nullable=True)

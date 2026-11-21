@@ -25,9 +25,16 @@ def verify_password(password: str, hashed: str) -> bool:
     return bcrypt.checkpw(password.encode(), hashed.encode())
 
 
-def create_session_token(user_id: int) -> str:
+def password_version(password_hash: str) -> str:
+    """Short fingerprint of the password hash. Sessions carry it, so changing or
+    resetting a password signs out every other session for that account."""
+    import hashlib
+    return hashlib.sha256(password_hash.encode()).hexdigest()[:16]
+
+
+def create_session_token(user: User) -> str:
     s = get_serializer()
-    return s.dumps({"uid": user_id})
+    return s.dumps({"uid": user.id, "pv": password_version(user.password_hash)})
 
 
 def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
@@ -44,11 +51,19 @@ def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
     user = db.query(User).filter(User.id == data["uid"], User.is_active == True).first()
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
+    if data.get("pv") != password_version(user.password_hash):
+        raise HTTPException(status_code=401, detail="Password changed, please sign in again")
     return user
 
 
-def set_session_cookie(response: Response, user_id: int) -> None:
-    token = create_session_token(user_id)
+def require_admin(user: User = Depends(get_current_user)) -> User:
+    if not user.is_admin:
+        raise HTTPException(status_code=403, detail="Only an admin can do that")
+    return user
+
+
+def set_session_cookie(response: Response, user: User) -> None:
+    token = create_session_token(user)
     response.set_cookie(
         SESSION_COOKIE,
         token,
