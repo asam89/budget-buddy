@@ -138,6 +138,8 @@ To stop: `launchctl unload ~/Library/LaunchAgents/com.budgetbuddy.plist`
 
 ## Security Checklist
 
+See **[SECURITY.md](SECURITY.md)** for how Budget Buddy is secured, what leaves the machine, and known gaps.
+
 - [ ] **DB passphrase**: Generated a strong random passphrase in `.env`
 - [ ] **Secret key**: Generated a separate random secret for session cookies
 - [ ] **`.env` not committed**: Verify with `git status` — `.env` is in `.gitignore`
