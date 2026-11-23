@@ -10,11 +10,14 @@ import {
 import { ENTITY_PALETTE, entityColor } from "../lib/entityColors";
 import VersionSection from "../components/VersionSection";
 import BackupSection from "../components/BackupSection";
+import AccountSection from "../components/AccountSection";
+import UsersSection from "../components/UsersSection";
+import type { Me } from "../api/client";
 import AiProviderSection from "../components/AiProviderSection";
 
 const ENTITY_TYPES = ["personal", "business", "rental", "household", "other"];
 
-export default function SettingsPage() {
+export default function SettingsPage({ me }: { me: Me }) {
   const [entities, setEntities] = useState<Entity[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -247,6 +250,10 @@ export default function SettingsPage() {
           </div>
         )}
       </section>
+
+      <AccountSection me={me} />
+
+      {me.is_admin && <UsersSection />}
 
       <AiProviderSection />
 
