@@ -11,6 +11,7 @@ A locally-hosted personal finance dashboard. All financial data stays on your ma
 - **Entity ledgers** — track House, Airbnb, Business etc. independently or combined; split shared expenses across entities
 - **Auto-tagging rules** — assign transactions to entities automatically based on account, name, or merchant
 - **Spending analytics** with category breakdowns, monthly trends, budget-vs-actual, and per-entity breakdowns
+- **Everyday spending** — quick add from any device (a phone-friendly `/add` page), receipt photos/PDFs read by your AI model, and an API-token inbox so tools like Muse or an iPhone Apple Pay automation can send spending for review ([docs/INGEST.md](docs/INGEST.md))
 - **Net worth balance sheet** — track assets (homes, businesses, investments, vehicles, cash) and liabilities (mortgages, loans, credit) with a total net-worth headline, per-class and per-entity breakdowns, and a snapshot-based net-worth trend chart
 - **Local dashboard** accessible from any device on your home network
 - **Auth gate** with bcrypt-hashed passwords and signed session cookies
@@ -73,10 +74,11 @@ source .venv/bin/activate
 python -m pytest tests/ -v
 ```
 
-Regression tests (300 and counting) covering: dedup logic, CSV/Excel import parsing, analytics aggregation math, entity CRUD, transaction splits, rule matching, per-entity aggregation, net worth balance sheet, schema repair, accounts and sign-in, and security (every endpoint requires sign-in, CSRF).
+Regression tests (311 and counting) covering: dedup logic, CSV/Excel import parsing, analytics aggregation math, entity CRUD, transaction splits, rule matching, per-entity aggregation, net worth balance sheet, schema repair, accounts and sign-in, and security (every endpoint requires sign-in, CSRF).
 
 ## Documentation
 
+- **[Sending spending in](docs/INGEST.md)** — Quick add, receipts, connecting Muse or an iPhone Shortcut with an API token
 - **[Security](docs/SECURITY.md)** — How data is protected when self-hosted, how updates are delivered safely, known gaps, setup checklist
 - **[Deployment Guide](docs/DEPLOYMENT.md)** — Full setup instructions for Mac and Windows, auto-start on boot, security checklist, updating to new versions
 - **[Contributing & Development](docs/CONTRIBUTING.md)** — Branching strategy, dev setup, project structure, versioning, multi-user roadmap

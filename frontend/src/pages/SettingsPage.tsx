@@ -12,6 +12,7 @@ import VersionSection from "../components/VersionSection";
 import BackupSection from "../components/BackupSection";
 import AccountSection from "../components/AccountSection";
 import UsersSection from "../components/UsersSection";
+import ApiTokensSection from "../components/ApiTokensSection";
 import type { Me } from "../api/client";
 import AiProviderSection from "../components/AiProviderSection";
 
@@ -254,6 +255,8 @@ export default function SettingsPage({ me }: { me: Me }) {
       <AccountSection me={me} />
 
       {me.is_admin && <UsersSection />}
+
+      {me.is_admin && <ApiTokensSection />}
 
       <AiProviderSection />
 

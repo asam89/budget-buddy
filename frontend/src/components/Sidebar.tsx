@@ -2,8 +2,9 @@ import { useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
 import {
   LayoutDashboard, Wallet, ArrowLeftRight, Upload,
-  Receipt, AlertCircle, BarChart3, LogOut, TrendingUp, Settings, Scale,
+  Receipt, AlertCircle, BarChart3, LogOut, TrendingUp, Settings, Scale, PlusCircle,
 } from "lucide-react";
+import AddSpendingModal from "./spending/AddSpendingModal";
 import { logout, getPendingReview, getNeedsCategory, getVersion, VersionInfo } from "../api/client";
 
 const links = [
@@ -22,6 +23,7 @@ const links = [
 export default function Sidebar({ username }: { username: string }) {
   const [reviewCount, setReviewCount] = useState(0);
   const [version, setVersion] = useState<VersionInfo | null>(null);
+  const [adding, setAdding] = useState(false);
 
   useEffect(() => {
     Promise.all([getPendingReview(), getNeedsCategory()])
@@ -46,6 +48,15 @@ export default function Sidebar({ username }: { username: string }) {
           </div>
         </div>
       </div>
+      <div className="px-2 pt-2">
+        <button
+          onClick={() => setAdding(true)}
+          className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg px-3 py-2 text-sm font-medium"
+        >
+          <PlusCircle size={16} /> Add spending
+        </button>
+      </div>
+      {adding && <AddSpendingModal onClose={() => setAdding(false)} />}
       <nav className="flex-1 p-2 space-y-1">
         {links.map(({ to, icon: Icon, label }) => (
           <NavLink

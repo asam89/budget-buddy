@@ -2,6 +2,7 @@ import hashlib
 from datetime import datetime, date
 
 from sqlalchemy import (
+    LargeBinary,
     Column, Integer, String, Float, DateTime, Date, ForeignKey,
     Boolean, Text, Index, UniqueConstraint,
 )
@@ -154,6 +155,7 @@ class Transaction(Base):
     source_page = Column(Integer, nullable=True)
     dedup_hash = Column(String, unique=True, nullable=True)
     notes = Column(Text, nullable=True)
+    receipt_id = Column(Integer, ForeignKey("receipts.id"), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     account = relationship("Account", back_populates="transactions")
@@ -393,3 +395,35 @@ class UserToken(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     expires_at = Column(DateTime, nullable=False)
     used_at = Column(DateTime, nullable=True)
+
+
+class Receipt(Base):
+    """A receipt photo or PDF, stored inside the encrypted database."""
+
+    __tablename__ = "receipts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    sha256 = Column(String, index=True, nullable=False)
+    filename = Column(String, nullable=True)
+    content_type = Column(String, nullable=False)
+    size = Column(Integer, nullable=False)
+    data = Column(LargeBinary, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class ApiToken(Base):
+    """A token that lets an outside tool (Muse, an iPhone Shortcut) send spending in.
+
+    Only a SHA-256 hash is stored; the token is shown once when created.
+    """
+
+    __tablename__ = "api_tokens"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False)
+    token_hash = Column(String, unique=True, nullable=False)
+    prefix = Column(String, nullable=False)  # first characters, to recognise it in the list
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    last_used_at = Column(DateTime, nullable=True)
+    revoked_at = Column(DateTime, nullable=True)

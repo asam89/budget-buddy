@@ -12,6 +12,7 @@ today; the tests that check it are named where they exist.
 | Data on disk | Database encrypted with SQLCipher (AES-256) using your `DB_PASSPHRASE` |
 | Who can reach the app | Your network only; nothing is published to the internet. Recommended: Tailscale |
 | Who can sign in | Accounts with bcrypt-hashed passwords; one-time invite links; admins manage access |
+| Connected tools | API tokens that can only add spending for review; revocable; stored hashed |
 | Sessions | Signed, `HttpOnly`, `SameSite=Lax` cookies that expire after 7 days and end when the password changes |
 | Forged requests | Cross-origin `POST`/`PUT`/`PATCH`/`DELETE` are rejected |
 | What leaves the machine | Nothing by default. Only Plaid (if connected), Claude (if you choose it) and GitHub (updates) |
@@ -30,6 +31,9 @@ today; the tests that check it are named where they exist.
 - **Bank tokens.** Plaid access tokens are stored inside the encrypted
   database. They are not encrypted a second time, so anyone holding both the
   database and `DB_PASSPHRASE` can read them.
+- **Receipts** (photos and PDFs) are stored inside the encrypted database,
+  not as loose files. Receipts that were scanned but never saved are deleted
+  after 24 hours.
 - **Backups** (Settings → Backup) contain:
   - `budget_buddy.db`: still encrypted with `DB_PASSPHRASE`. The copy is
     re-opened and every table's row count checked before it's handed out.
@@ -98,12 +102,21 @@ Tested in `tests/test_accounts.py`.
 ## 5. Request protection
 
 - **Every API endpoint requires a signed-in user** except: sign-in, sign-out,
-  first-time setup, the one-time invite/reset links, `/healthz`, and the web
-  app's own files. A test enumerates every endpoint and fails if any other one
+  first-time setup, the one-time invite/reset links, `/healthz`, the web
+  app's own files, and the connected-tools inbox (which requires an API token). A test enumerates every endpoint and fails if any other one
   is reachable without signing in
   (`tests/test_security.py::test_every_other_endpoint_requires_sign_in`).
-- **Admin-only actions** (managing users, invites, reset links) check the admin
-  role on the server, not just in the web page.
+- **Admin-only actions** (managing users, invites, reset links, API tokens)
+  check the admin role on the server, not just in the web page.
+- **Connected tools** (`/api/ingest/spending`) authenticate with an API token
+  (`Authorization: Bearer bb_…`) instead of a login. A token can only add
+  spending, which waits on the Review page; it can't read data or change
+  anything else. Tokens are random, stored only as SHA-256 hashes, shown once,
+  and revocable, and the last-used time is shown in Settings
+  (`tests/test_spending.py`).
+- **Receipt uploads** are limited to 10 MB. The file type is checked from the
+  file's contents (JPEG, PNG, WebP, HEIC or PDF), not just its name. Receipts
+  are served back with `X-Content-Type-Options: nosniff`.
 - **Cross-site request forgery:** state-changing requests whose `Origin` is a
   different site are rejected with 403 (`CSRF_PROTECT`, on by default), on top
   of the `SameSite=Lax` cookie (`tests/test_security.py`).
@@ -117,7 +130,7 @@ By default, nothing. Data only leaves when you turn on one of these:
 | Service | When | What is sent |
 |---------|------|--------------|
 | Plaid | Only if you connect a bank (needs `PLAID_CLIENT_ID`/`PLAID_SECRET`) | Requests for your accounts and transactions |
-| Anthropic (Claude) | Only if you pick Claude in Settings → AI provider | Statement text, budget files and summaries sent for parsing and insights |
+| Anthropic (Claude) | Only if you pick Claude in Settings → AI provider | Statement text, budget files, receipt images and summaries sent for parsing and insights |
 | Ollama | Default AI provider; runs on the Mac itself | Nothing leaves the machine |
 | GitHub | When you check for or install updates | A `git fetch`/`git pull` of this repository; no data from the app |
 
@@ -160,8 +173,9 @@ Being upfront about what isn't covered yet:
   Only signed-in users on your network can reach the affected code, which
   limits the risk, but these should be upgraded and a dependency audit added
   to CI.
-- **No sign-in rate limiting or lockout.** Repeated password guesses aren't
-  slowed down. Keeping the app off the open internet (Tailscale only) is the
+- **No sign-in or token rate limiting.** Repeated password or token guesses
+  aren't slowed down (tokens are 256-bit random, so guessing one isn't
+  practical). Keeping the app off the open internet (Tailscale only) is the
   main defense; use strong passwords.
 - **Plain HTTP on the home network** unless you restrict the app to Tailscale
   as described above.

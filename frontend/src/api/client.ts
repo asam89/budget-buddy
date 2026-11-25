@@ -629,6 +629,7 @@ export interface Transaction {
   review_source: string | null;
   confidence: number | null;
   notes: string | null;
+  receipt_id?: number | null;
   created_at: string;
 }
 
@@ -850,3 +851,60 @@ export async function downloadBackup(): Promise<string> {
   URL.revokeObjectURL(url);
   return name;
 }
+
+
+// Everyday spending: quick add, receipts, API tokens
+export interface SpendingOptions {
+  categories: { id: number; name: string; entity_id: number | null }[];
+  entities: { id: number; name: string }[];
+  default_entity_id: number | null;
+  today: string;
+}
+export interface SpendingInput {
+  amount: number;
+  description: string;
+  date?: string;
+  merchant?: string;
+  category_id?: number | null;
+  new_category?: string;
+  entity_id?: number | null;
+  notes?: string;
+  receipt_id?: number | null;
+}
+export interface SpendingSaved {
+  id: number;
+  date: string;
+  amount: number;
+  name: string;
+  category_id: number | null;
+  receipt_id: number | null;
+  created: boolean;
+  manual_actual_overrides: boolean;
+}
+export interface ReceiptDraft {
+  receipt_id: number;
+  merchant: string | null;
+  date: string | null;
+  total: number | null;
+  tax: number | null;
+  currency: string | null;
+  category_id: number | null;
+  category_guess: string | null;
+  summary: string | null;
+  warnings: string[];
+  already_saved_transaction_id: number | null;
+}
+export interface ApiTokenRow { id: number; name: string; prefix: string; created_at: string | null; last_used_at: string | null; revoked: boolean }
+export const getSpendingOptions = () => request<SpendingOptions>("/spending/options");
+export const addSpending = (data: SpendingInput) =>
+  request<SpendingSaved>("/spending", { method: "POST", body: JSON.stringify(data) });
+export const scanReceipt = (file: File) => {
+  const form = new FormData();
+  form.append("file", file);
+  return request<ReceiptDraft>("/spending/receipt/scan", { method: "POST", body: form });
+};
+export const receiptUrl = (id: number) => `${BASE}/spending/receipts/${id}`;
+export const listApiTokens = () => request<ApiTokenRow[]>("/spending/tokens");
+export const createApiToken = (name: string) =>
+  request<{ id: number; name: string; token: string }>("/spending/tokens", { method: "POST", body: JSON.stringify({ name }) });
+export const revokeApiToken = (id: number) => request<Record<string, never>>(`/spending/tokens/${id}`, { method: "DELETE" });

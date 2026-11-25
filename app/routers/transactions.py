@@ -278,7 +278,9 @@ def review_transaction(
     if data.merchant_name is not None:
         txn.merchant_name = data.merchant_name
 
-    if data.review_status == "confirmed":
+    # Items sent in by tools keep their external-ID fingerprint, so a resend is
+    # still recognised after approval (and two identical coffees don't collide).
+    if data.review_status == "confirmed" and not (txn.dedup_hash or "").startswith("ext:"):
         txn.dedup_hash = Transaction.compute_dedup_hash(
             txn.date, txn.amount, txn.name, txn.account_id
         )
