@@ -67,16 +67,19 @@ def _route_deps(dependant):
 
 
 def test_every_other_endpoint_requires_sign_in():
+    """Signed-in user, admin, or (for /api/ingest) an API token."""
     from fastapi.routing import APIRoute
     from app.main import app
+    from app.routers.ingest import require_api_token
     from app.utils.auth import get_current_user, require_admin
 
+    guards = {get_current_user, require_admin, require_api_token}
     unprotected = set()
     for r in app.routes:
         if not isinstance(r, APIRoute):
             continue
         deps = _route_deps(r.dependant)
-        if get_current_user in deps or require_admin in deps:
+        if guards & set(deps):
             continue
         for m in r.methods:
             if (m, r.path) not in PUBLIC_ROUTES:

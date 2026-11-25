@@ -12,6 +12,13 @@ import {
 } from "../api/client";
 import { CheckCircle, XCircle, AlertCircle, Tag } from "lucide-react";
 import EntityBadge from "../components/EntityBadge";
+import ReceiptLink from "../components/spending/ReceiptLink";
+
+const SOURCE_LABELS: Record<string, string> = {
+  api: "Sent in by a connected tool",
+  receipt: "Receipt",
+  quick_add: "Quick add",
+};
 
 function fmt(n: number) {
   return new Intl.NumberFormat("en-CA", { style: "currency", currency: "CAD" }).format(n);
@@ -105,12 +112,13 @@ export default function ReviewPage() {
                   <div className="flex items-center gap-2 mb-1">
                     <AlertCircle size={14} className="text-yellow-400" />
                     <span className="text-xs text-yellow-400">
-                      {t.review_source} {t.confidence ? `(${Math.round(t.confidence * 100)}% confidence)` : ""}
+                      {SOURCE_LABELS[t.review_source ?? ""] ?? t.review_source} {t.confidence ? `(${Math.round(t.confidence * 100)}% confidence)` : ""}
                     </span>
                   </div>
                   <div className="flex items-center gap-4">
                     <span className="text-gray-400 text-sm">{t.date}</span>
                     <span className="font-medium">{t.merchant_name || t.name}</span>
+                    <ReceiptLink id={t.receipt_id} />
                     <span className={`font-medium ${t.amount < 0 ? "text-emerald-400" : "text-red-400"}`}>
                       {fmt(t.amount)}
                     </span>
@@ -166,6 +174,7 @@ export default function ReviewPage() {
                   <Tag size={14} className="text-amber-400" />
                   <span className="text-gray-400 text-sm">{t.date}</span>
                   <span className="font-medium">{t.merchant_name || t.name}</span>
+                  <ReceiptLink id={t.receipt_id} />
                   <span className={`font-medium ${t.amount < 0 ? "text-emerald-400" : "text-red-400"}`}>
                     {fmt(t.amount)}
                   </span>

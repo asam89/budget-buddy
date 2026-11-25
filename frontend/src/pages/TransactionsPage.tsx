@@ -42,6 +42,7 @@ import {
   FileSpreadsheet,
 } from "lucide-react";
 import EntityBadge from "../components/EntityBadge";
+import ReceiptLink from "../components/spending/ReceiptLink";
 
 function fmt(n: number) {
   return new Intl.NumberFormat("en-CA", {
@@ -298,7 +299,7 @@ export default function TransactionsPage() {
               className="cursor-pointer hover:text-emerald-400"
               onDoubleClick={() => startEdit(t.id, "name", t.name)}
             >
-              <p>{t.merchant_name || t.name}</p>
+              <p>{t.merchant_name || t.name} <ReceiptLink id={t.receipt_id} /></p>
               {t.merchant_name && t.name !== t.merchant_name && (
                 <p className="text-xs text-gray-500">{t.name}</p>
               )}

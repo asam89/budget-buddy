@@ -14,6 +14,7 @@ import NetWorthPage from "./pages/NetWorthPage";
 import SettingsPage from "./pages/SettingsPage";
 import LoginPage from "./pages/LoginPage";
 import LinkPage from "./pages/LinkPage";
+import AddSpendingPage from "./pages/AddSpendingPage";
 import { getMe, Me } from "./api/client";
 
 function App() {
@@ -48,6 +49,18 @@ function App() {
           <Route path="/invite/:token" element={<LinkPage onDone={setUser} />} />
           <Route path="/reset/:token" element={<LinkPage onDone={setUser} />} />
           <Route path="*" element={<LoginPage onLogin={setUser} />} />
+        </Routes>
+      </BrowserRouter>
+    );
+  }
+
+  // Phone-friendly quick add, without the sidebar.
+  if (window.location.pathname === "/add") {
+    return (
+      <BrowserRouter>
+        <Routes>
+          <Route path="/add" element={<AddSpendingPage />} />
+          <Route path="*" element={<Navigate to="/" />} />
         </Routes>
       </BrowserRouter>
     );

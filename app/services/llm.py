@@ -31,6 +31,10 @@ class LLMProvider(Protocol):
     def health(self) -> LLMHealth:
         ...
 
+    def complete_json_image(self, prompt: str, image: bytes, media_type: str,
+                            max_tokens: int = 1024) -> dict | list:
+        ...
+
 
 class OllamaProvider:
     """Local LLM via Ollama HTTP API."""
@@ -86,6 +90,25 @@ class OllamaProvider:
             if content.startswith("```"):
                 content = content.split("\n", 1)[1].rsplit("```", 1)[0].strip()
             return json.loads(content)
+
+    def complete_json_image(self, prompt: str, image: bytes, media_type: str,
+                            max_tokens: int = 1024) -> dict | list:
+        """Ask a vision-capable local model (e.g. gemma3) about one image."""
+        import base64
+        payload = {
+            "model": self._model,
+            "messages": [{"role": "user", "content": prompt,
+                          "images": [base64.b64encode(image).decode()]}],
+            "stream": False,
+            "format": "json",
+            "options": {"num_predict": max_tokens},
+        }
+        resp = requests.post(f"{self._base_url}/api/chat", json=payload, timeout=self._timeout)
+        resp.raise_for_status()
+        content = resp.json()["message"]["content"].strip()
+        if content.startswith("```"):
+            content = content.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+        return json.loads(content)
 
     def health(self) -> LLMHealth:
         start = time.time()
@@ -146,6 +169,27 @@ class AnthropicProvider:
         if content.startswith("```"):
             content = content.split("\n", 1)[1].rsplit("```", 1)[0].strip()
 
+        return json.loads(content)
+
+    def complete_json_image(self, prompt: str, image: bytes, media_type: str,
+                            max_tokens: int = 1024) -> dict | list:
+        import base64
+
+        import anthropic
+
+        client = anthropic.Anthropic(api_key=self._api_key)
+        message = client.messages.create(
+            model=self._model,
+            max_tokens=max_tokens,
+            messages=[{"role": "user", "content": [
+                {"type": "image", "source": {"type": "base64", "media_type": media_type,
+                                             "data": base64.b64encode(image).decode()}},
+                {"type": "text", "text": prompt},
+            ]}],
+        )
+        content = message.content[0].text.strip()
+        if content.startswith("```"):
+            content = content.split("\n", 1)[1].rsplit("```", 1)[0].strip()
         return json.loads(content)
 
     def health(self) -> LLMHealth:

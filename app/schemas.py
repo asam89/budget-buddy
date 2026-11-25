@@ -211,6 +211,7 @@ class TransactionOut(BaseModel):
     review_source: Optional[str]
     confidence: Optional[float]
     notes: Optional[str]
+    receipt_id: Optional[int] = None
     created_at: datetime
     splits: list[TransactionSplitOut] = []
     model_config = {"from_attributes": True}
