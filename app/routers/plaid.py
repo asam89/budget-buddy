@@ -15,8 +15,11 @@ from app.database import get_db
 from app.models import PlaidItem, Account, Institution, Transaction
 from app.schemas import PlaidLinkTokenResponse, PlaidExchangeRequest
 from app.services.rule_engine import apply_rules_to_transaction, infer_txn_type
+from app.utils.auth import get_current_user
 
-router = APIRouter(prefix="/api/plaid", tags=["plaid"])
+# Every Plaid endpoint requires a signed-in user: these spend your Plaid
+# credentials and can add bank connections and transactions to the books.
+router = APIRouter(prefix="/api/plaid", tags=["plaid"], dependencies=[Depends(get_current_user)])
 
 PLAID_ENV_MAP = {
     "sandbox": plaid.Environment.Sandbox,

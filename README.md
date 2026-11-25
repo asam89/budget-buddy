@@ -41,6 +41,19 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 
 Open http://localhost:8000 — on first visit, create your admin account.
 
+## Security
+
+Budget Buddy runs on your own machine and keeps your data there:
+
+- **Encrypted at rest:** the database is encrypted with SQLCipher (AES-256) using your `DB_PASSPHRASE`.
+- **Private network only:** nothing is published to the internet. Reach it from your home network or, recommended, over Tailscale (end-to-end encrypted, only your devices).
+- **Accounts:** bcrypt-hashed passwords, one-time invite and reset links, admin-managed access. Signed `HttpOnly` session cookies end when a password changes.
+- **Every data endpoint requires sign-in**, and a test fails the build if one doesn't. Cross-site form posts are blocked.
+- **Nothing leaves the machine by default.** Data is sent out only to Plaid (if you connect a bank), Claude (if you choose it over local Ollama) and GitHub (updates).
+- **Safe updates:** changes reach the Mac only from `main` after CI tests pass. A failed update stops before restarting, so the previous version keeps running.
+
+**Read [docs/SECURITY.md](docs/SECURITY.md)** for the details, a setup checklist and the known gaps (including dependency upgrades still to do).
+
 ## Tech Stack
 
 | Layer | Technology |
@@ -60,10 +73,11 @@ source .venv/bin/activate
 python -m pytest tests/ -v
 ```
 
-Regression tests (255 and counting) covering: dedup logic, CSV/Excel import parsing, analytics aggregation math, entity CRUD, transaction splits, rule matching, per-entity aggregation, net worth balance sheet, and schema repair.
+Regression tests (300 and counting) covering: dedup logic, CSV/Excel import parsing, analytics aggregation math, entity CRUD, transaction splits, rule matching, per-entity aggregation, net worth balance sheet, schema repair, accounts and sign-in, and security (every endpoint requires sign-in, CSRF).
 
 ## Documentation
 
+- **[Security](docs/SECURITY.md)** — How data is protected when self-hosted, how updates are delivered safely, known gaps, setup checklist
 - **[Deployment Guide](docs/DEPLOYMENT.md)** — Full setup instructions for Mac and Windows, auto-start on boot, security checklist, updating to new versions
 - **[Contributing & Development](docs/CONTRIBUTING.md)** — Branching strategy, dev setup, project structure, versioning, multi-user roadmap
 - **[Entities & Rules](docs/ENTITIES.md)** — Entity model, transaction splits, auto-tagging rules, API reference
